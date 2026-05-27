@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>nanochat: product story</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa;
+          --accent: #0969da; --rule: #d0d7de; --good: #2da44e; --warn: #bf8700; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 2em; margin: 0 0 .15em; }
+  h2 { font-size: 1.3em; margin: 2em 0 .4em; padding-bottom: .25em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.05em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .6em 0; }
+  .muted { color: var(--muted); }
+  .pitch { font-size: 1.25em; line-height: 1.5; padding: 14px 18px; background: var(--soft);
+            border-left: 3px solid var(--accent); border-radius: 4px; margin: .5em 0 1.5em; }
+  .pain { font-size: 1.05em; padding: 14px 18px; background: var(--soft); border-radius: 4px;
+           margin: .5em 0 1.5em; border-left: 3px solid var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: .5em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left;
+            vertical-align: top; font-size: .92em; }
+  th { background: var(--soft); font-weight: 600; }
+  td .verdict { display: block; font-weight: 600; color: var(--fg); margin-bottom: 2px; }
+  td .detail { display: block; color: var(--muted); font-size: .9em; line-height: 1.45; }
+  td.row-head { background: var(--soft); white-space: nowrap; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 1em 0; }
+  @media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
+  .card { border: 1px solid var(--rule); border-radius: 6px; padding: 14px 16px; background: #fff; }
+  .card h3 { margin: 0 0 .4em; font-size: 1em; }
+  .card.sacrifices h3::before { content: "—  "; color: var(--warn); }
+  .card.gains h3::before { content: "+  "; color: var(--good); }
+  .card ul { margin: .3em 0 0; padding-left: 1.2em; }
+  .card li { margin: .35em 0; font-size: .94em; }
+  .callout { margin: 1em 0; padding: 14px 18px; background: #fff8e1; border-left: 3px solid var(--warn);
+              border-radius: 4px; font-size: .95em; }
+  .callout strong { display: block; margin-bottom: .3em; }
+  .dim-defs { margin: 0 0 1em; padding-left: 1.2em; }
+  .dim-defs li { margin: .25em 0; font-size: .95em; }
+  /* Vertical card list for surprises / absences. Each item is one self-contained block. */
+  .item-list { list-style: none; padding: 0; margin: .5em 0 1.5em; }
+  .item-list > li { padding: 12px 0 14px; border-top: 1px solid var(--rule); }
+  .item-list > li:first-child { border-top: none; padding-top: 6px; }
+  .item-list .headline { font-weight: 600; font-size: 1.02em; color: var(--fg); }
+  .item-list .where { color: var(--muted); font-size: .88em; margin-top: 3px; line-height: 1.4; }
+  .item-list .where code { background: none; color: var(--muted); padding: 0; }
+  .item-list .body { color: var(--muted); font-size: .92em; line-height: 1.5; margin-top: 5px; }
+  .item-list .body code { background: var(--soft); color: var(--fg); }
+  code { font: .88em/1.4 ui-monospace, "SF Mono", Consolas, monospace;
+          background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+</style>
+</head>
+<body>
+  <h1>nanochat</h1>
+  <p class="muted">A product story reverse engineered from the codebase.</p>
+
+  <h2>The pitch</h2>
+  <p class="pitch">It's like building your own ChatGPT, but it's a minimal codebase that allows individual developers to train a GPT-2 capability chat AI from scratch for under $100.</p>
+
+  <h2>The pain</h2>
+  <p class="pain">An ambitious student, Kai, wants to train his own LLM to explore cutting-edge research, but each Google search reveals projects costing tens of thousands of dollars and requiring massive, complex setups. His real competitor isn't another coding framework, it's the financial barrier and the overwhelming feeling that this field is only for tech giants.</p>
+
+  <h2>Where it sits</h2>
+  <p class="muted">Four dimensions that actually split this product from its competitors.</p>
+
+  <div class="two-col">
+    <div class="card sacrifices">
+      <h3>What it gives up</h3>
+      <ul>
+        <li>nanochat sacrifices state-of-the-art model scale and raw capability by focusing on micro models up to GPT-2 level.</li>
+        <li>It trades plug-and-play ease of use for requiring users to set up a Python environment, manage GPUs, and run scripts directly.</li>
+        <li>The project is an experimental harness, not a robust, managed production platform with enterprise-grade features or scalability.</li>
+        <li>nanochat prioritizes minimalism, which means it may lack the comprehensive features or alternative architectures found in broader frameworks.</li>
+      </ul>
+    </div>
+    <div class="card gains">
+      <h3>What it gets in return</h3>
+      <ul>
+        <li>It achieves unparalleled cost-efficiency, allowing users to train a full GPT-2 model for less than $100.</li>
+        <li>Users gain full ownership and control over the code, the trained models, and the entire AI pipeline.</li>
+        <li>It serves as an excellent educational tool for deeply understanding LLM internals, training processes, and systems optimizations.</li>
+        <li>The codebase is extremely hackable, making it simple to modify, experiment with, and adapt to specific research ideas.</li>
+        <li>The project is highly optimized for 'time to GPT-2', allowing for rapid iteration and quick achievement of a functional model.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Why incumbents can't copy this</strong>
+<p>OpenAI and other API providers cannot copy nanochat's core value proposition without destroying their business model. Their revenue comes from selling access to proprietary, large-scale models, not from empowering users to build and own entire training pipelines for cheap. Offering nanochat's fully open-source, self-hosted training for sub-$100 would directly cannibalize their primary revenue stream and expose their core intellectual property. HuggingFace, while open-source, operates as a general-purpose hub supporting a vast ecosystem. Adopting nanochat's extreme minimalism and single-node, sub-$100 focus would require sacrificing the platform's broad flexibility and its capacity for complex, distributed research, which is central to its brand and utility.</p>
+
+  </div>
+
+  <h3>Side by side: dimensions and competitors</h3>
+  <ul class="dim-defs">
+    <li><strong>Code is Public?</strong>: Can you see and change how the software works, or is it a secret paid service?</li>
+    <li><strong>Train Small Model Price?</strong>: How much does it cost to train a basic AI from scratch, like a GPT-2 level model, to talk to?</li>
+    <li><strong>Full AI Process?</strong>: Does it handle all steps of making an AI, from raw data to a working chat bot, or just parts?</li>
+    <li><strong>Easy to Change?</strong>: Can you easily change the inner workings of the AI code to experiment, or is it a fixed tool?</li>
+  </ul>
+  <table>
+    <thead><tr><th>Product</th><th>Code is Public?</th><th>Train Small Model Price?</th><th>Full AI Process?</th><th>Easy to Change?</th></tr></thead>
+    <tbody>
+      <tr><td class="row-head"><strong>nanochat</strong></td><td><span class="verdict">Open</span><span class="detail">Every file is plain Python you can fork, with an MIT license for full transparency and modification.</span></td><td><span class="verdict">&lt;$100</span><span class="detail">The README documents a $48 training run to achieve GPT-2 level capability on an 8xH100 node.</span></td><td><span class="verdict">Yes</span><span class="detail">It covers the entire pipeline: tokenization, pretraining, finetuning, evaluation, inference, and a web chat UI.</span></td><td><span class="verdict">Very</span><span class="detail">It is explicitly designed to be minimal, hackable, and controlled by a single complexity dial for easy experimentation.</span></td></tr>
+      <tr><td class="row-head"><strong>OpenAI ChatGPT/GPT-4 API</strong></td><td><span class="verdict">Closed</span><span class="detail">Access is API-only, meaning the core model code and architecture are proprietary and hidden.</span></td><td><span class="verdict">Per token</span><span class="detail">Costs scale by usage (tokens), not by a one-time training investment, and training your own small model isn't offered.</span></td><td><span class="verdict">None</span><span class="detail">Users interact with a finished, pre-trained model; there is no access to the foundational training or model-building stages.</span></td><td><span class="verdict">No</span><span class="detail">Customization is limited to prompt engineering or API-level fine-tuning of a pre-existing model.</span></td></tr>
+      <tr><td class="row-head"><strong>HuggingFace Transformers</strong></td><td><span class="verdict">Open</span><span class="detail">The library and many of its models are open source under permissive licenses for broad use.</span></td><td><span class="verdict">High</span><span class="detail">Training a full model from scratch typically requires significant cloud GPU resources and considerable expertise.</span></td><td><span class="verdict">Parts</span><span class="detail">It provides components (models, datasets, tokenizers, trainers), but integrating them into a complete chat system requires significant development effort.</span></td><td><span class="verdict">Some</span><span class="detail">Highly flexible for research, but navigating and modifying the extensive framework can be complex.</span></td></tr>
+      <tr><td class="row-head"><strong>Lit-GPT (from Lightning AI)</strong></td><td><span class="verdict">Open</span><span class="detail">It is designed for transparency and hackability, offering minimal, readable implementations, often MIT licensed.</span></td><td><span class="verdict">Moderate</span><span class="detail">While more accessible than large-scale corporate training, achieving full training on a personal budget often exceeds $100.</span></td><td><span class="verdict">Parts</span><span class="detail">It focuses heavily on core model architecture and pretraining, often requiring additional setup for chat UIs, full evaluation, and finetuning integration.</span></td><td><span class="verdict">Good</span><span class="detail">It is built for education and experimentation, providing clear code that is relatively easy to modify.</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Hiding in the code</h2>
+  <p class="muted">Features the README doesn't advertise. Each one is a bet about where the product is going next.</p>
+  <ul class="item-list">
+    <li><div class="headline">Sandboxed Python Tool Execution</div><div class="where">nanochat/execution.py, nanochat/engine.py</div><div class="body">The product is betting on agentic LLMs that can use external tools to verify their own reasoning and solve complex problems, moving beyond just text generation. This feature is crucial for advanced reasoning tasks and agents.</div></li>
+    <li><div class="headline">Custom Tuned BPE Tokenizer</div><div class="where">nanochat/tokenizer.py, scripts/tok_train.py</div><div class="body">Optimizing tokenization for specific model sizes and datasets is a key lever for efficiency and performance, suggesting a deep commitment to squeezing performance out of smaller models, even going beyond standard models like GPT-4's tokenization split pattern.</div></li>
+    <li><div class="headline">Hybrid Muon/AdamW Optimizer</div><div class="where">nanochat/optim.py, scripts/base_train.py</div><div class="body">Custom, bleeding-edge optimization strategies are crucial for pushing the boundaries of micro-model training efficiency. This hybrid approach enables competitive results on commodity hardware by selectively applying different optimization techniques to different parameter groups.</div></li>
+    <li><div class="headline">Best-Fit Data Packing for Training</div><div class="where">nanochat/dataloader.py</div><div class="body">Training efficiency is paramount; optimizing data loading to minimize padding and maximize full document context for every token is a critical, unglamorous detail. This significantly impacts compute time and model quality by increasing GPU utilization and providing richer training signals.</div></li>
+    <li><div class="headline">Adaptive Residual Scaling</div><div class="where">nanochat/gpt.py</div><div class="body">Small, learnable architectural components, like per-layer <code>resid_lambdas</code> and <code>x0_lambdas</code>, can provide significant performance gains. This gives the model more control over information flow and shortcut connections, indicating a focus on fine-grained architectural optimization for better convergence.</div></li>
+    <li><div class="headline">Dynamic Flash Attention 3 Integration</div><div class="where">nanochat/flash_attention.py</div><div class="body">Cutting-edge GPU-specific optimizations are necessary for competitive training speeds, but broad hardware compatibility through intelligent fallback is also a priority for accessibility. This ensures the best performance on modern hardware while remaining functional on older GPUs.</div></li>
+    <li><div class="headline">Automated Training Report Generation</div><div class="where">nanochat/report.py, scripts/base_train.py</div><div class="body">Reproducibility and comprehensive logging are foundational to iterative LLM research and improvement. This built-in reporting system speaks to a scientific-first approach, enabling deep analysis of experimental results and changes.</div></li>
+  </ul>
+
+  <h2>Missing on purpose</h2>
+  <p class="muted">Features every competitor ships that this codebase deliberately doesn't. Strategy is choosing what not to do.</p>
+  <ul class="item-list">
+    <li><div class="headline">No Multi-User Accounts</div><div class="where">nanochat/ui.html, scripts/chat_web.py (no authentication, user management, or user-specific data storage models or logic)</div><div class="body">Stays focused on a local, experimental harness for a single researcher or team. This avoids the significant complexity, security overhead, and privacy concerns associated with user management and data isolation in a multi-tenant environment.</div></li>
+    <li><div class="headline">No Third-Party Plugin System</div><div class="where">Absence of plugin directories, manifest files, dynamic loading mechanisms, or an exposed API for external tool integration beyond the specific Python sandbox.</div><div class="body">Prioritizes minimalism and control over the codebase. This sidesteps the security risks, maintenance burden, and compatibility challenges of a dynamic plugin ecosystem, keeping the core product lean and predictable.</div></li>
+    <li><div class="headline">No Persistent Conversation History</div><div class="where">No database schema for storing past chats (e.g., no <code>Conversation</code> table), <code>chat_web.py</code> uses in-memory <code>messages</code> array, cleared on <code>newConversation()</code>.</div><div class="body">Keeps the system stateless and focused on immediate interaction for research and demonstration. This avoids the storage, retrieval, privacy, and scalability complexities associated with managing large volumes of user dialogue history.</div></li>
+    <li><div class="headline">No In-App Analytics Dashboard</div><div class="where">Absence of <code>/api/analytics</code> endpoints, database tables for usage metrics (e.g., <code>ChatLog</code>, <code>UserActivity</code>), or custom UI components for dashboards in <code>nanochat/ui.html</code>.</div><div class="body">Leans on mature, specialized external tools like Weights &amp; Biases (<code>wandb</code>) for detailed metric tracking. This avoids building and maintaining complex analytics infrastructure, keeping the project focused on LLM training and inference mechanics.</div></li>
+    <li><div class="headline">No Multimedia Capabilities</div><div class="where">Absence of libraries for audio/video processing, no <code>VideoCall</code> or <code>AudioStream</code> components, no references to multimedia APIs like Daily.co or Zoom.</div><div class="body">Stays laser-focused on core text-based LLM functionality. This avoids the significant complexity, data requirements, and computational overhead of multi-modal AI, which would drastically change the project's scope and resource demands.</div></li>
+    <li><div class="headline">No Native Mobile App</div><div class="where">No iOS/Android project files, no mentions of mobile SDKs, mobile-specific UI/API considerations, or push notification services.</div><div class="body">Prioritizes web accessibility and rapid iteration for a desktop/server-centric development workflow. This avoids the significant development, maintenance, and distribution overhead of native mobile applications, which cater to a different user base and require specialized skills.</div></li>
+  </ul>
+</body>
+</html>

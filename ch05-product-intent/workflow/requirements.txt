@@ -1,0 +1,4 @@
+# Install shared deps first:
+#     pip install -r ../../utils/requirements.txt
+#
+# This chapter adds no extra deps.
