@@ -1,0 +1,127 @@
+# Domain rules: how to approach ANY codebase
+
+> Rules that don't belong to one project. They tell the agent how to *think* about an unfamiliar codebase. Drop this into your home directory's agent config (Claude Code: `~/.claude/CLAUDE.md`, Cursor: a global rule). It loads before any project rules.
+
+This is the agent equivalent of the layer-specific instructions Parts 2 through 5 of the book teach. Each chapter contributes a section. The per-project `CLAUDE.md` is "what I know about THIS codebase." This file is "what I know about ANY codebase."
+
+## General reading discipline
+
+- **One focused question beats a broad one.** "Trace what happens when a user clicks save" surfaces cross-file structure. "Summarize the architecture" produces a wall of type signatures. Always prefer the trace.
+- **Read the error handling before the happy path.** Catch blocks, error middleware, retry wrappers, and timeouts reveal every failure mode the team has already hit in production. That's the real architecture, not the diagram on the wiki.
+- **Default values are product decisions.** A `timeout=30` isn't an arbitrary number. It's a claim about what most users can tolerate. Read defaults as opinions, not magic constants.
+- **Comments lie. Tests lie when stale. Code never lies.** When the comment and the code disagree, trust the code and update the comment. When the test mocks something the code doesn't, look for the integration test that catches what the unit test misses.
+- **`git blame` on the hottest file tells you the bug factory.** Files with 50+ blame entries by 10+ authors are where merges go wrong, contracts drift, and the next regression lives.
+- **TODO comments older than 12 months are abandoned plans, not work items.** Treat them as archaeology, not commitments.
+
+## Product intent (Ch 5)
+
+When asked "what does this product DO":
+
+- **Look for the pain scene before the feature list.** What specific moment of frustration drove the first user to this product? Cite a file or a route, not a slogan.
+- **Pitch as "It is X, but Y."** X is a product a non-engineer would recognize. Y is the one concrete bet this product makes that X doesn't.
+- **The real competitor is usually the manual workaround**, not another product. Spreadsheets, sticky notes, email threads, "I just keep it in my head". Those are the incumbents.
+- **Counter-positioning shows up in what the product DELIBERATELY skips.** A missing feature every competitor has is more interesting than a feature only this product has.
+- **Read the empty config slots.** `.env.example` with `STRIPE_KEY=` but no Stripe code in the repo tells you the team is planning monetization. Reverse-engineer roadmap from infrastructure scaffolding.
+
+## Git history (Ch 6)
+
+When asked "how did this codebase get to this shape":
+
+- **First 50 commits = the MVP.** Whatever shipped in the first month is the core thesis. Everything since is iteration.
+- **Recent commits = current priorities.** The last 100 commits tell you what the team is fighting with right now.
+- **Deletions are stronger signals than additions.** Code the team removed was once important enough to write. Its removal is a strategic admission: "we don't believe in this anymore."
+- **Reverts are the most honest commits in the log.** "Revert PR 1234" means a real user hit a real bug bad enough to ship a rollback. Read those PRs first.
+- **Bus factor leaks through `git shortlog -sn`.** If 80% of commits are by 1 person, the project's continuity is their continuity. If contributors are evenly distributed, the project has a real community.
+
+## Schema and data model (Ch 7)
+
+When handed a database schema:
+
+- **The table with the most foreign keys pointing TO it is the most important entity.** Usually `users`, `accounts`, `organizations`, `projects`, `documents`. Start there.
+- **Enums are business rules.** A column `status` with values `pending, active, archived` is a state machine. Find every transition in the code.
+- **Foreign keys are verbs.** `Orders has user_id` reads as "Users place Orders." That sentence is the business.
+- **Constraints are product decisions.** `unique(email)` says "one account per email is the law of this system." `not null` says "this field is non-optional in the business model, not just the database."
+- **Soft-delete columns (`deleted_at`, `archived_at`) tell you what the team is afraid of losing.** If `users` is hard-deletable but `payments` is soft, billing data is the most legally fraught.
+- **"metadata" or "extras" JSON columns are where features go to die.** Schemaless dumping grounds usually mean the team punted on modeling.
+- **Audit tables tell you what compliance requires.** Their presence reveals industry (healthcare, finance, government).
+
+## Interfaces (Ch 8)
+
+When asked "what can this product do":
+
+- **List the entry points; that IS the feature list.** Routes, CLI commands, exported functions, public methods, message handlers, webhook receivers, scheduled jobs.
+- **Group by what the user gets, not what the code is called.** `POST /auth/oauth/callback` is "Sign in with Google", not "OAuth callback handler."
+- **Hidden entry points reveal scope creep.** A flag `--admin` on a CLI that's not documented is a feature only employees use. That feature is the *other* product.
+- **The shape of arguments reveals the user model.** `create_team(owner_id)` says teams have one owner. `create_team(member_ids)` says teams are flat.
+
+## Architecture (Ch 9)
+
+When asked "how do the services talk":
+
+- **Find the message bus first.** If there is one (Kafka, RabbitMQ, Redis streams), the bus topology is the architecture. The services are just subscribers.
+- **If no bus, the dependency injection wiring is the architecture.** Find where services are constructed and passed to other services. That graph is your map.
+- **Synchronous vs async boundaries are the real seams.** Cross-team boundaries are almost always async (queue, webhook, event). Within-team is synchronous (function call, RPC).
+- **Trace one message across the system.** Diagrams without one concrete flow are useless. Pick a real event and follow it from emit to all handlers.
+
+## Backend implementation (Ch 10-11)
+
+When tracing a backend request:
+
+- **URL → router → middleware → controller → service → repository → DB.** That's the canonical shape. Where this codebase deviates is where its conventions live.
+- **Auth happens once, somewhere in middleware.** Find that one place. Everything past it trusts the user.
+- **Side effects (emails, webhooks, push, billing) usually fire from the service layer, not the controller.** If they fire from the controller, the team optimized for "easy to see," not "easy to test."
+- **The dependency injection container is the org chart.** What's constructed at startup is what the team considers shared infrastructure.
+- **Background jobs and queues hide as much logic as request handlers.** Half the system runs there.
+
+## Frontend implementation (Ch 12)
+
+When asked to understand a UI:
+
+- **The 500-line component nobody wants to touch IS the feature.** Find it first. Everything else orbits it.
+- **State management is where the bugs live.** Where state mutates (reducers, stores, signals, refs), there be dragons. Read those before reading components.
+- **The component that imports the most others is the orchestrator.** Usually `App`, `Layout`, `Page`. The orchestrator owns the data fetching contract.
+- **CSS comments are usually load-bearing.** `/* don't remove, needed for Safari */` exists because someone tried to remove it.
+
+## Libraries and frameworks (Ch 13)
+
+When reading something you'd `import`:
+
+- **What is the public API?** Whatever `__init__.py` / `index.ts` exports is the contract. Everything else is implementation detail you may break across versions.
+- **What is the core engine?** The smallest piece you couldn't remove without the library being a different library. Usually one file, often <500 lines.
+- **Where are the extension points?** Plugins, hooks, callbacks, registered providers. The architecture is shaped by what users are allowed to swap in.
+- **The integration tests are the documentation.** They show how real users are expected to wire the library into their code.
+
+## Data and ML pipelines (Ch 14)
+
+When reading a pipeline:
+
+- **The DAG IS the architecture.** Whatever the orchestrator (Airflow, Prefect, Dagster, Argo) treats as a node is what the team treats as a unit of work.
+- **Look at the schedule, not just the code.** A daily job and an hourly job mean different things even if the code is identical.
+- **Failure modes are explicit.** Retries, backoff, dead-letter queues, alerts. Where they're set tells you what the team is afraid of.
+
+## Infrastructure (Ch 15)
+
+When reading IaC / configs:
+
+- **Resource counts reveal scale.** Number of replicas, partition counts, queue depths, instance sizes.
+- **What's deployed in multiple regions vs one tells you about availability requirements.**
+- **Secrets management reveals security maturity.** Hardcoded secrets in env files vs Vault/KMS is a one-line answer to "how much do they care about leaks."
+
+## Tests and CI (Ch 16)
+
+When reading tests:
+
+- **What does the test SUITE guarantee, not what does the single test check.** Read the test names as a list. That list IS the spec.
+- **Mock-heavy tests = the system is hard to set up.** Heavy mocking is technical debt about test infrastructure, not about the test author.
+- **Fixtures tell you what state matters.** What gets seeded before every test is the minimum viable world for this system.
+- **Flaky tests are usually concurrency bugs, not test bugs.** Don't `pytest --rerun-failed` your way out. Find the race.
+
+## Folder layout (Ch 17)
+
+- **The folder structure is the team's mental model.** What's a sibling vs nested tells you what the team considers part of what.
+- **Folders named after technical concepts ("services/", "models/") are MVC residue.** Folders named after features ("checkout/", "billing/") are domain-driven.
+- **The `experimental/` folder is half-finished bets. Read with caution.**
+
+---
+
+This file grows as you progress through Parts 2 to 5 of the book. Each chapter contributes one section. By the end, your agent walks into any codebase with a playbook for how to read it.
