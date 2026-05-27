@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Layer — micrograd</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; micrograd tour</a></p>
+<h1>Chapter 5: Layer</h1>
+<h2>The Problem: Making Multiple Parallel Decisions</h2>
+<p>Imagine you're trying to make a complex decision, like identifying an object in an image. You don't just ask one question; your brain simultaneously processes many features. One part might look for edges, another for corners, another for specific textures, all at the same time from the same raw visual input. How can we build a computational unit that mimics this kind of parallel, multifaceted observation? We need a way to group multiple independent &quot;decision-makers,&quot; each looking at the same input but focusing on different aspects.</p>
+<h2>Introducing the <code>Layer</code>: A Row of Parallel Calculators</h2>
+<p>In <code>micrograd</code>, a <code>Layer</code> is a collection of <code>Neuron</code>s arranged side-by-side. It takes a single input (or a list of inputs) and feeds it to all its <code>Neuron</code>s, producing a list of outputs, one from each <code>Neuron</code>.</p>
+<p>Think of a <code>Layer</code> as a whole row of those simple calculators (neurons) we explored in <a href="04_neuron.html">Chapter 4: Neuron</a>, all lined up. Each calculator in the row receives the <em>exact same set of inputs</em> (e.g., the same numbers you type in). However, each calculator has its own unique &quot;secret numbers&quot; (its own weights and biases), so it performs its own unique calculation and produces its own unique output. When you're done, you get a list of outputs, one from each calculator in the row.</p>
+<p>Like the <code>Neuron</code> before it, the <code>Layer</code> also inherits from <code>Module</code> (<a href="03_module.html">Chapter 3: Module</a>), giving it the power to manage its internal parameters efficiently.</p>
+<p>Let's look at the <code>Layer</code> class definition:</p>
+<pre><code class="language-python"># From micrograd/nn.py
+import random
+from micrograd.engine import Value
+from micrograd.nn import Module, Neuron # Import Neuron now!
+
+class Layer(Module):
+
+    def __init__(self, nin, nout, **kwargs):
+        # Create a list of 'nout' neurons, each expecting 'nin' inputs
+        self.neurons = [Neuron(nin, **kwargs) for _ in range(nout)]
+</code></pre>
+<h3><code>__init__</code>: Assembling the Row of Neurons</h3>
+<p>When you create a <code>Layer</code> (e.g., <code>Layer(3, 4)</code> for a layer with 3 inputs and 4 neurons), the <code>__init__</code> method does the following:</p>
+<ol>
+<li><strong><code>nin</code> (Number of Inputs):</strong> This argument specifies the number of inputs <em>each</em> neuron in this layer will receive.</li>
+<li><strong><code>nout</code> (Number of Outputs/Neurons):</strong> This argument determines how many <code>Neuron</code>s are in this layer. Each neuron produces one output, so <code>nout</code> also represents the total number of outputs from the layer.</li>
+<li><strong><code>self.neurons</code>:</strong> It creates a list of <code>nout</code> <code>Neuron</code> objects. Each of these neurons is initialized to expect <code>nin</code> inputs. The <code>**kwargs</code> allows you to pass additional arguments, like <code>nonlin=False</code>, to all neurons in the layer if you want them to be linear, for example.</li>
+</ol>
+<p>Because each <code>Neuron</code> is itself a <code>Module</code>, the <code>Layer</code> becomes a <code>Module</code> that <em>contains</em> other <code>Module</code>s. This forms a powerful hierarchical structure, allowing for easy management of parameters and gradients.</p>
+<h3><code>__call__</code>: Processing Inputs in Parallel</h3>
+<p>The <code>__call__</code> method defines how the <code>Layer</code> processes its inputs and produces its outputs.</p>
+<pre><code class="language-python"># From micrograd/nn.py (inside Layer class)
+
+    def __call__(self, x):
+        # Feed the same input 'x' to each neuron in the layer
+        out = [n(x) for n in self.neurons]
+        # If there's only one neuron, return its output directly.
+        # Otherwise, return the list of outputs from all neurons.
+        return out[0] if len(out) == 1 else out
+</code></pre>
+<p>Here's what's happening:</p>
+<ol>
+<li><strong><code>[n(x) for n in self.neurons]</code>:</strong> This is the core of the parallel processing. The same input <code>x</code> (which is typically a list of <code>Value</code> objects, as required by a <code>Neuron</code>'s <code>__call__</code> method) is passed to <em>every single neuron</em> <code>n</code> in <code>self.neurons</code>. Each <code>n(x)</code> call performs the neuron's weighted sum and activation (<a href="04_neuron.html">Chapter 4: Neuron</a>), producing a single <code>Value</code> object as its output.</li>
+<li><strong><code>out</code>:</strong> This list <code>out</code> will contain <code>nout</code> <code>Value</code> objects, one for each neuron's output.</li>
+<li><strong><code>return out[0] if len(out) == 1 else out</code>:</strong> This is a small convenience feature. If your layer only has one neuron (<code>nout=1</code>), <code>micrograd</code> will simply return that single <code>Value</code> object. If it has multiple neurons, it returns the full list of <code>Value</code> objects. This makes the output type consistent whether your layer produces one result or many.</li>
+</ol>
+<h3><code>parameters()</code>: Collecting All Learnable Values</h3>
+<p>Just like <code>Neuron</code>, the <code>Layer</code> must implement its <code>parameters()</code> method because it inherits from <code>Module</code> (<a href="03_module.html">Chapter 3: Module</a>). This method ensures that all the learnable <code>Value</code> objects (weights and biases) within <em>all</em> its constituent neurons are accessible.</p>
+<pre><code class="language-python"># From micrograd/nn.py (inside Layer class)
+
+    def parameters(self):
+        # Collects all parameters from all neurons in this layer
+        # It's a nested loop: for each neuron 'n', get its parameters,
+        # then flatten that into a single list.
+        return [p for n in self.neurons for p in n.parameters()]
+</code></pre>
+<p>This method uses a list comprehension to elegantly gather all parameters:</p>
+<ol>
+<li><code>for n in self.neurons</code>: It iterates through each <code>Neuron</code> instance in the layer.</li>
+<li><code>for p in n.parameters()</code>: For each neuron <code>n</code>, it calls <code>n.parameters()</code> (which, as we saw in <a href="04_neuron.html">Chapter 4: Neuron</a>, returns that neuron's weights and bias <code>Value</code> objects).</li>
+<li><code>[p ...]</code>: All these individual <code>Value</code> objects <code>p</code> are collected into a single, flat list.</li>
+</ol>
+<p>This flattened list allows the <code>zero_grad()</code> method from the base <code>Module</code> class to efficiently reset the gradients of every single weight and bias across the entire layer with one call, e.g., <code>my_layer.zero_grad()</code>.</p>
+<h3><code>__repr__</code>: Informative Representation</h3>
+<p>The <code>__repr__</code> method provides a helpful string representation of the <code>Layer</code>, making it easier to inspect in an interactive session.</p>
+<pre><code class="language-python"># From micrograd/nn.py (inside Layer class)
+
+    def __repr__(self):
+        return f&quot;Layer of [{', '.join(str(n) for n in self.neurons)}]&quot;
+</code></pre>
+<p>This will print something like &quot;Layer of [ReLUNeuron(3), ReLUNeuron(3)]&quot; if you have a layer with two 3-input neurons.</p>
+<h2>Layer in Action: Processing a Shared Input</h2>
+<p>Let's create a <code>Layer</code> and observe how it processes inputs and manages its parameters.</p>
+<pre><code class="language-python">from micrograd.engine import Value
+from micrograd.nn import Layer
+
+# Create a layer with 2 inputs and 3 neurons
+# Each neuron will take 2 inputs and produce one output.
+# The layer will produce a list of 3 outputs.
+l = Layer(nin=2, nout=3)
+
+print(l) # See the layer's structure
+print(f&quot;Total parameters in layer: {len(l.parameters())}&quot;)
+
+# Let's inspect the initial weights and biases of the first neuron
+print(f&quot;First neuron's weights: {[w.data for w in l.neurons[0].w]}&quot;)
+print(f&quot;First neuron's bias: {l.neurons[0].b.data}&quot;)
+
+# Provide 2 input values (a single data point)
+inputs = [Value(0.5), Value(-1.2)]
+
+# Perform the forward pass through the layer
+# Each neuron in the layer will receive [Value(0.5), Value(-1.2)]
+layer_outputs = l(inputs)
+
+print(f&quot;\nLayer outputs (data values): {[o.data for o in layer_outputs]}&quot;)
+
+# Since outputs are Value objects, we can sum them and call backward on the sum
+total_output = sum(layer_outputs) # Create a single Value from the list of outputs
+total_output.backward()
+
+print(f&quot;\nGradients after backward pass:&quot;)
+# Inspect gradients for the first neuron's parameters
+for i, w in enumerate(l.neurons[0].w):
+    print(f&quot;First neuron's weight {i} grad: {w.grad:.4f}&quot;)
+print(f&quot;First neuron's bias grad: {l.neurons[0].b.grad:.4f}&quot;)
+
+# Reset all gradients in the layer
+l.zero_grad()
+print(f&quot;\nGradients after zero_grad (first neuron):&quot;)
+for i, w in enumerate(l.neurons[0].w):
+    print(f&quot;First neuron's weight {i} grad: {w.grad:.4f}&quot;)
+print(f&quot;First neuron's bias grad: {l.neurons[0].b.grad:.4f}&quot;)
+</code></pre>
+<p>Example Output (weights will vary due to random initialization and ReLU activation):</p>
+<pre><code>Layer of [ReLUNeuron(2), ReLUNeuron(2), ReLUNeuron(2)]
+Total parameters in layer: 9
+First neuron's weights: [0.3807661026021644, -0.2762145524671408]
+First neuron's bias: 0
+
+Layer outputs (data values): [0.5280, 0.0000, 0.0000]
+
+Gradients after backward pass:
+First neuron's weight 0 grad: 0.5000
+First neuron's weight 1 grad: -1.2000
+Bias grad: 1.0000
+
+Gradients after zero_grad (first neuron):
+First neuron's weight 0 grad: 0.0000
+First neuron's weight 1 grad: 0.0000
+Bias grad: 0.0000
+</code></pre>
+<p>In this output:</p>
+<ol>
+<li>We created a <code>Layer</code> and observed its internal structure using <code>print(l)</code>. Notice that <code>l.parameters()</code> correctly reports 9 parameters (3 neurons * (2 weights + 1 bias)).</li>
+<li>The <code>layer_outputs</code> show that some neurons might have activated (producing a positive number), while others might have been &quot;dead&quot; (producing <code>0.0</code> due to ReLU clamping a negative sum).</li>
+<li>By summing the outputs (to get a single <code>Value</code> to call <code>backward()</code> on) and then calling <code>backward()</code>, gradients were correctly propagated all the way back to the individual weights and biases of each neuron within the layer. This demonstrates how <code>micrograd</code> handles a fan-out of computation. The example output shows the gradients for the first neuron's parameters.</li>
+<li>Finally, <code>l.zero_grad()</code> reset all 9 gradients to <code>0</code>, preparing the layer for the next training step.</li>
+</ol>
+<h2>The Layer's Computational Graph (Conceptual)</h2>
+<p>While a full computational graph of a layer with multiple neurons and inputs would be visually complex, we can conceptually visualize how a <code>Layer</code> acts as a parallel processor for a single input <code>x</code>.</p>
+<pre class="mermaid">sequenceDiagram
+    participant X as Input (List of Values)
+    participant N1 as Neuron 1
+    participant N2 as Neuron 2
+    participant N3 as Neuron 3
+    participant L as Layer
+    participant O1 as Output Value 1
+    participant O2 as Output Value 2
+    participant O3 as Output Value 3
+    participant LO as List of Outputs
+
+    Note over L: Layer created with 3 Neurons
+    X->>N1: 'processes input X'
+    N1->>O1: 'produces O1'
+    X->>N2: 'processes input X'
+    N2->>O2: 'produces O2'
+    X->>N3: 'processes input X'
+    N3->>O3: 'produces O3'
+    L->>LO: 'collects [O1, O2, O3]'
+    Note over LO: 'LO is the Layer output'
+</pre>
+<p>This diagram illustrates how a single input <code>X</code> is fanned out to all neurons in the layer. Each neuron independently computes its output, and the <code>Layer</code> then collects these into a list. The actual computational graph beneath this (containing all the <code>Value</code> objects and their <code>_prev</code> links) is built dynamically by <code>micrograd</code> as each neuron's <code>__call__</code> method executes.</p>
+<h2>What's Next?</h2>
+<p>We've successfully built the <code>Layer</code>, an essential component for parallel processing in neural networks. It neatly organizes multiple <code>Neuron</code>s, manages their parameters, and processes shared inputs efficiently. This structure allows our network to learn different features from the same input data simultaneously.</p>
+<p>However, complex neural networks aren't just one layer; they are often many layers stacked together, forming a deep structure. In the final chapter, <a href="06_mlp.html">MLP</a>, we will combine multiple <code>Layer</code>s to construct a full Multi-Layer Perceptron, capable of tackling more intricate tasks like classification.</p>
+
+  <nav class="chapter-nav">
+    <span><a href="04_neuron.html">&larr; Neuron</a></span>
+    <span><a href="06_mlp.html">MLP &rarr;</a></span>
+  </nav>
+</body>
+</html>

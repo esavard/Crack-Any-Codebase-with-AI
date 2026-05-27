@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>backward — micrograd</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; micrograd tour</a></p>
+<h1>Chapter 2: backward</h1>
+<p>In <a href="01_value.html">Chapter 1: Value</a>, we learned how <code>Value</code> objects store numbers (<code>data</code>) and, critically, remember their computational &quot;family tree&quot; by linking to their parents (<code>_prev</code>) and noting the operation (<code>_op</code>) that created them. This forms a <strong>computational graph</strong>, a detailed record of every calculation. We saw how a &quot;forward pass&quot; correctly computes the numerical <code>data</code> for a final output.</p>
+<p>But if you remember, the <code>grad</code> attribute for all <code>Value</code> objects remained <code>0</code>. This <code>grad</code> is the &quot;sensitivity score&quot; we talked about, the crucial piece of information a neural network needs to learn.</p>
+<h2>The Problem: Assigning Credit Where Credit is Due</h2>
+<p>Imagine a large company with many departments, each performing various operations (marketing, sales, production, R&amp;D). At the end of the year, the company reports its final profit or loss. Now, the CEO wants to know: <strong>How much did each department contribute to that final profit or loss?</strong> Which department's performance, if slightly improved or worsened, would have the biggest impact on the bottom line?</p>
+<p>This is a classic &quot;credit assignment problem.&quot; In our <code>micrograd</code> world, the &quot;company's profit&quot; is the final <code>Value</code> object's <code>data</code>, and the &quot;departments&quot; are all the intermediate <code>Value</code> objects (and ultimately, the initial inputs like weights and biases). We need a systematic way to trace backward through the company's financial records to assign a &quot;contribution score&quot; (<code>grad</code>) to every operation and every initial resource.</p>
+<h2>Introducing <code>backward()</code>: Tracing the Sensitivity</h2>
+<p>This is precisely what the <code>backward()</code> method on a <code>Value</code> object does. When you call <code>some_final_value.backward()</code>, you are instructing <code>micrograd</code> to start the &quot;credit assignment&quot; process. It will:</p>
+<ol>
+<li><strong>Initialize the final output's <code>grad</code>:</strong> The first step is to state that the final output's sensitivity to <em>itself</em> is <code>1</code>. If you change the final output by <code>X</code>, it changes by <code>X</code>. So, <code>self.grad</code> is set to <code>1.0</code>.</li>
+<li><strong>Traverse the graph in reverse:</strong> It moves backward through the computational graph, from the final output all the way to the initial inputs.</li>
+<li><strong>Apply the Chain Rule:</strong> At each <code>Value</code> object, it uses a small, stored function (<code>_backward</code>) to calculate and accumulate the gradient for its parents, based on its own already-calculated gradient. This is the heart of the <strong>chain rule</strong> from calculus.</li>
+</ol>
+<p>Let's look at a simple example to illustrate the chain rule:</p>
+<p>If <code>c = a + b</code>, then <code>dc/da = 1</code> and <code>dc/db = 1</code>.
+If <code>d = c * e</code>, then <code>dd/dc = e</code> and <code>dd/de = c</code>.</p>
+<p>Now, if we want <code>dd/da</code>, we use the chain rule: <code>dd/da = (dd/dc) * (dc/da)</code>.
+This means: <code>dd/da = e * 1</code>.</p>
+<p>The <code>_backward</code> functions inside each <code>Value</code> object know these small, local derivatives. When <code>backward()</code> is called, it triggers these <code>_backward</code> functions in the correct order, passing the accumulated <code>grad</code> backward.</p>
+<h2>The Blueprint for Backpropagation: <code>_backward</code> Functions</h2>
+<p>Recall from <a href="01_value.html">Chapter 1: Value</a> that every time a new <code>Value</code> object <code>out</code> is created from an operation, a special <code>_backward</code> function is attached to it. This function holds the specific rules for how gradients should be propagated <em>backward</em> for that particular operation.</p>
+<p>Let's revisit the <code>__add__</code> and <code>__mul__</code> methods from <code>micrograd/engine.py</code> to see their <code>_backward</code> implementations:</p>
+<pre><code class="language-python"># From micrograd/engine.py (simplified)
+class Value:
+    # ... initializer and other methods ...
+
+    def __add__(self, other):
+        other = other if isinstance(other, Value) else Value(other)
+        out = Value(self.data + other.data, (self, other), '+')
+
+        def _backward():
+            # For addition, the gradient from 'out' flows directly to both inputs.
+            # E.g., if out = self + other, then dout/dself = 1 and dout/dother = 1.
+            # So, dL/dself = dL/dout * dout/dself = dL/dout * 1
+            # And, dL/dother = dL/dout * dout/dother = dL/dout * 1
+            self.grad += out.grad
+            other.grad += out.grad
+        out._backward = _backward
+        return out
+
+    def __mul__(self, other):
+        other = other if isinstance(other, Value) else Value(other)
+        out = Value(self.data * other.data, (self, other), '*')
+
+        def _backward():
+            # For multiplication, the gradient is scaled by the *other* input's data.
+            # E.g., if out = self * other, then dout/dself = other.data and dout/dother = self.data.
+            # So, dL/dself = dL/dout * dout/dself = dL/dout * other.data
+            # And, dL/dother = dL/dout * dout/dother = dL/dout * self.data
+            self.grad += other.data * out.grad
+            other.grad += self.data * out.grad
+        out._backward = _backward
+        return out
+</code></pre>
+<p>Notice how these <code>_backward</code> functions take <code>out.grad</code> (the gradient <em>from</em> the subsequent nodes in the graph) and distribute it to <code>self.grad</code> and <code>other.grad</code> (the gradients <em>for</em> the preceding nodes). This is the local application of the chain rule.</p>
+<h2>The <code>backward()</code> Method: Orchestrating the Credit Assignment</h2>
+<p>The <code>backward()</code> method on the final <code>Value</code> object acts as the conductor for this gradient propagation symphony. It needs to ensure that gradients are calculated in the correct order.</p>
+<p>Consider the simple graph <code>f = d + e</code> from <a href="01_value.html">Chapter 1: Value</a>. For <code>f</code> to correctly update the gradients of <code>d</code> and <code>e</code>, <code>f.grad</code> must already be known. Similarly, for <code>d</code> to update <code>a</code> and <code>b</code>, <code>d.grad</code> must be known. This implies a reverse traversal.</p>
+<p>To handle complex graphs with branching paths and shared inputs (like <code>a</code> contributing to both <code>c</code> and <code>d</code> in the example from <code>README.md</code>), <code>micrograd</code> uses a standard algorithm called <strong>topological sort</strong>.</p>
+<h3>Topological Sort: The Right Order</h3>
+<p>A topological sort orders the nodes in a directed acyclic graph (DAG) such that for every directed edge from node A to node B, A comes before B in the ordering. For backpropagation, we need the <em>reverse</em> of this order: we need to process <code>Value</code> objects from the output back to the inputs.</p>
+<p>Here's how <code>micrograd</code> achieves this using a helper function <code>build_topo</code>:</p>
+<pre><code class="language-python"># From micrograd/engine.py
+class Value:
+    # ... (other methods) ...
+
+    def backward(self):
+
+        # 1. Build a topological order of the graph nodes
+        topo = []
+        visited = set()
+        def build_topo(v):
+            if v not in visited:
+                visited.add(v)
+                for child in v._prev: # Recursively visit parents
+                    build_topo(child)
+                topo.append(v) # Add current node to topo list *after* its children
+        build_topo(self) # Start building from the current (final) Value
+
+        # 2. Initialize the gradient of the output node
+        self.grad = 1.0 # The gradient of the output with respect to itself is 1
+
+        # 3. Iterate through the graph in reverse topological order
+        #    and call each node's _backward() function
+        for v in reversed(topo):
+            v._backward()
+</code></pre>
+<p>Let's visualize the flow when <code>backward()</code> is called on a final <code>Value</code> object, <code>f</code>. Imagine a small graph where <code>f = d + e</code>, and <code>d</code> depends on <code>a</code> and <code>b</code>, while <code>e</code> depends only on <code>b</code>.</p>
+<pre class="mermaid">sequenceDiagram
+    participant Final f as Value f (Output)
+    participant Value e
+    participant Value d
+    participant Value b
+    participant Value a
+
+    Final f->>Final f: backward() called
+    Final f->>Final f: Set f.grad = 1.0
+    Final f->>Value b: build_topo() explores parents, finds b
+    Final f->>Value a: build_topo() explores parents, finds a
+    Note over Final f: Topological order determined: [b, a, d, e, f]
+    Final f->>Final f: Iterates reversed order: f, e, d, a, b
+    Final f->>Final f: Calls f._backward()
+    Final f->>Value e: Calls e._backward() (propagate to b)
+    Final f->>Value d: Calls d._backward() (propagate to a, b)
+    Final f->>Value a: Calls a._backward() (no parents, no-op)
+    Final f->>Value b: Calls b._backward() (no parents, no-op)
+    Note over Value a, Value b: All gradients (a.grad, b.grad, etc.) are now accumulated!
+</pre>
+<ol>
+<li><code>build_topo(self)</code> recursively explores the graph, adding <code>Value</code> objects to the <code>topo</code> list only after all their children (nodes that depend on them) have been processed. This results in <code>topo</code> containing nodes from inputs to output (e.g., <code>[b, a, d, e, f]</code>).</li>
+<li><code>self.grad</code> (the gradient of the final output with respect to itself) is initialized to <code>1.0</code>.</li>
+<li>The loop then iterates <code>for v in reversed(topo):</code>. This ensures that we process nodes from output back to input (e.g., <code>f</code>, then <code>e</code>, then <code>d</code>, then <code>a</code>, then <code>b</code>).</li>
+<li>For each <code>v</code>, <code>v._backward()</code> is called. This triggers the specific gradient propagation logic for that operation, accumulating <code>grad</code> values for its parents. Since we're moving in reverse topological order, by the time <code>v._backward()</code> is called, <code>v.grad</code> (the credit assigned to <code>v</code>) is already fully accumulated from all subsequent operations.</li>
+</ol>
+<h2>Putting It All Together</h2>
+<p>Let's use the example from <code>micrograd</code>'s <code>README.md</code> to see the <code>backward()</code> method in action:</p>
+<pre><code class="language-python">from micrograd.engine import Value
+
+a = Value(-4.0)
+b = Value(2.0)
+
+# Build a more complex computational graph (forward pass)
+c = a + b
+d = a * b + b**3
+c += c + 1
+c += 1 + c + (-a)
+d += d * 2 + (b + a).relu()
+d += 3 * d + (b - a).relu()
+e = c - d
+f = e**2
+g = f / 2.0
+g += 10.0 / f
+
+print(f'{g.data:.4f}') # The final numerical result
+
+# Now, call backward() on the final output 'g'
+g.backward()
+
+# Inspect the gradients for the initial inputs 'a' and 'b'
+print(f'dg/da: {a.grad:.4f}') # This is a.grad
+print(f'dg/db: {b.grad:.4f}') # This is b.grad
+</code></pre>
+<p>Output:</p>
+<pre><code>24.7041
+dg/da: 138.8338
+dg/db: 645.5773
+</code></pre>
+<p>When <code>g.backward()</code> is called:</p>
+<ol>
+<li><code>g.grad</code> is set to <code>1.0</code>.</li>
+<li>A topological sort of the entire graph (from <code>g</code> all the way back to <code>a</code> and <code>b</code>) is performed.</li>
+<li><code>micrograd</code> then iterates through the nodes in reverse topological order.</li>
+<li>For each node, its specific <code>_backward()</code> function is executed. This function, using the chain rule, calculates how much that node's parents should &quot;take credit&quot; for its current gradient, adding it to the parents' <code>grad</code> attributes.</li>
+<li>By the time the loop finishes, all <code>Value</code> objects in the graph, including our initial inputs <code>a</code> and <code>b</code>, have their <code>grad</code> attributes correctly populated, telling us their sensitivity to the final output <code>g</code>.</li>
+</ol>
+<p>This is the power of <code>micrograd</code>: it automates the complex calculus of backpropagation, turning the &quot;credit assignment problem&quot; into a straightforward function call.</p>
+<h2>What's Next?</h2>
+<p>We've now mastered how <code>Value</code> objects manage numerical data and, more importantly, how the <code>backward()</code> method efficiently calculates gradients across an entire computational graph. This mechanism for calculating sensitivities is the bedrock of training neural networks.</p>
+<p>However, building a neural network involves more than just individual numbers. It requires organizing these <code>Value</code> objects into reusable structures like neurons and layers. In the next chapter, <a href="03_module.html">Module</a>, we'll see how <code>micrograd</code> provides a foundational class for building such structured components, making it easier to construct complex neural networks.</p>
+
+  <nav class="chapter-nav">
+    <span><a href="01_value.html">&larr; Value</a></span>
+    <span><a href="03_module.html">Module &rarr;</a></span>
+  </nav>
+</body>
+</html>

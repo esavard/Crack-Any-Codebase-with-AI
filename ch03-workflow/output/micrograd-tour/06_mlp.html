@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MLP — micrograd</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; micrograd tour</a></p>
+<h1>Chapter 6: MLP</h1>
+<h2>The Problem: Building Deep, Complex Decision Pipelines</h2>
+<p>In <a href="05_layer.html">Chapter 5: Layer</a>, we learned how to arrange multiple neurons side-by-side to create a <code>Layer</code>, allowing us to process inputs in parallel and extract multiple features simultaneously. This is like having a single processing station on an assembly line that performs several different checks on a product at once.</p>
+<p>But what if the decisions we need to make are more complex? What if the &quot;features&quot; identified by one layer need to be combined and re-evaluated by another layer to discover even more abstract or subtle patterns? For instance, to recognize a face, you first identify edges (Layer 1), then combine edges to form shapes like eyes and nose (Layer 2), and finally combine those shapes to identify a whole face (Layer 3). How can we stack these processing layers one after another to build a deep, hierarchical decision pipeline?</p>
+<h2>Introducing the <code>MLP</code>: A Stack of Processing Layers</h2>
+<p>An <strong>MLP</strong>, or <strong>Multi-Layer Perceptron</strong>, is <code>micrograd</code>'s answer to this. It's a complete neural network made by taking several <code>Layer</code>s and stacking them sequentially. Data flows through these layers one by one, with the output of one layer becoming the input to the next.</p>
+<p>Imagine that assembly line again, but now with <strong>multiple processing stations</strong> (our <code>Layer</code>s) lined up.</p>
+<ul>
+<li>Products (your input data) enter the first station.</li>
+<li>The first station performs its transformations and sends its modified products to the second station.</li>
+<li>The second station processes these already-transformed products and passes them to the third.</li>
+<li>This continues until the product emerges from the final station, fully transformed into the network's output.</li>
+</ul>
+<p>Each <code>Layer</code> in an <code>MLP</code> builds on the computations of the previous one, allowing the network to learn progressively more complex and abstract representations of the input data. Just like <code>Neuron</code> and <code>Layer</code> before it, <code>MLP</code> inherits from <code>Module</code> (<a href="03_module.html">Chapter 3: Module</a>), providing a consistent way to manage all its learnable parameters.</p>
+<p>Let's examine the <code>MLP</code> class definition:</p>
+<pre><code class="language-python"># From micrograd/nn.py
+import random
+from micrograd.engine import Value
+from micrograd.nn import Module, Neuron, Layer # Now we import Layer!
+
+class MLP(Module): # MLP is a Module
+
+    def __init__(self, nin, nouts):
+        # Determine the sizes of inputs and outputs for each layer
+        sz = [nin] + nouts
+        # Create a list of Layer objects
+        self.layers = [Layer(sz[i], sz[i+1], nonlin=i!=len(nouts)-1) for i in range(len(nouts))]
+</code></pre>
+<h3><code>__init__</code>: Constructing the Assembly Line</h3>
+<p>When you create an <code>MLP</code> (e.g., <code>MLP(3, [4, 4, 1])</code> for a network that takes 3 inputs, has two hidden layers with 4 neurons each, and a final output layer with 1 neuron), the <code>__init__</code> method handles the setup:</p>
+<ol>
+<li><strong><code>nin</code> (Number of Inputs):</strong> This is the number of features in your initial data, which will be fed into the first layer.</li>
+<li><strong><code>nouts</code> (List of Output Sizes):</strong> This is a list that specifies the number of neurons in each subsequent layer. For example, <code>[4, 4, 1]</code> means:
+<ul>
+<li>The first hidden layer will have 4 neurons.</li>
+<li>The second hidden layer will have 4 neurons.</li>
+<li>The final output layer will have 1 neuron.</li>
+</ul>
+</li>
+<li><strong><code>sz = [nin] + nouts</code>:</strong> This line cleverly creates a list of all the layer input/output dimensions. If <code>nin=3</code> and <code>nouts=[4,4,1]</code>, then <code>sz</code> becomes <code>[3, 4, 4, 1]</code>.
+<ul>
+<li>The first layer will take <code>sz[0]</code> (3) inputs and produce <code>sz[1]</code> (4) outputs.</li>
+<li>The second layer will take <code>sz[1]</code> (4) inputs and produce <code>sz[2]</code> (4) outputs.</li>
+<li>The third (output) layer will take <code>sz[2]</code> (4) inputs and produce <code>sz[3]</code> (1) output.</li>
+</ul>
+</li>
+<li><strong><code>self.layers = [...]</code>:</strong> This creates a list of <code>Layer</code> objects, one for each entry in <code>nouts</code>.
+<ul>
+<li><code>Layer(sz[i], sz[i+1], ...)</code>: Each layer is initialized with the correct number of inputs and outputs using the <code>sz</code> list.</li>
+<li><code>nonlin=i!=len(nouts)-1</code>: This is a critical detail! It means that <em>all hidden layers</em> (all layers except the very last one) will use a non-linear activation function (like ReLU). The <em>final layer</em> will typically be linear (<code>nonlin=False</code>), as its output might directly represent a score, a regression value, or needs to be passed to a specific loss function (e.g., for binary classification, the final output might be passed through a sigmoid function <em>after</em> the MLP).</li>
+</ul>
+</li>
+</ol>
+<h3><code>__call__</code>: Data Flowing Through the Pipeline</h3>
+<p>The <code>__call__</code> method defines how data (inputs <code>x</code>) moves sequentially through the entire network, from the first layer to the last.</p>
+<pre><code class="language-python"># From micrograd/nn.py (inside MLP class)
+
+    def __call__(self, x):
+        # Iterate through each layer, passing the output of one as input to the next
+        for layer in self.layers:
+            x = layer(x) # The output of the layer becomes the input for the next
+        return x # The final output of the entire MLP
+</code></pre>
+<p>This is surprisingly simple! It loops through <code>self.layers</code>. In each iteration, it takes the current <code>x</code> (which is initially the network's input, then the output of the previous layer), passes it through the <code>layer</code>, and then updates <code>x</code> with the new output. When the loop finishes, the final <code>x</code> is the output of the entire <code>MLP</code>.</p>
+<h3><code>parameters()</code>: The Network's Full Inventory</h3>
+<p>As with any <code>Module</code>, the <code>MLP</code> needs a <code>parameters()</code> method to list all its learnable <code>Value</code> objects. This allows <code>zero_grad()</code> (from <a href="03_module.html">Chapter 3: Module</a>) and an optimizer to efficiently access and update every single weight and bias across all layers.</p>
+<pre><code class="language-python"># From micrograd/nn.py (inside MLP class)
+
+    def parameters(self):
+        # Collects all parameters from all layers in the MLP
+        # It's a nested loop: for each layer 'layer', get its parameters,
+        # then flatten that into a single list.
+        return [p for layer in self.layers for p in layer.parameters()]
+</code></pre>
+<p>This method uses a similar list comprehension as the <code>Layer</code>'s <code>parameters()</code> method, but one level deeper. It iterates through each <code>Layer</code> in <code>self.layers</code>, then for each <code>Layer</code>, it calls <code>layer.parameters()</code> (which, as we saw in <a href="05_layer.html">Chapter 5: Layer</a>, returns <em>its</em> neurons' weights and biases), and finally collects all these individual <code>Value</code> objects <code>p</code> into one master list. This makes <code>mlp.zero_grad()</code> a single, powerful command to reset all gradients in the entire network.</p>
+<h3><code>__repr__</code>: Seeing the Network's Structure</h3>
+<p>The <code>__repr__</code> method provides a helpful string representation of the <code>MLP</code>, making it easy to see its layered architecture at a glance.</p>
+<pre><code class="language-python"># From micrograd/nn.py (inside MLP class)
+
+    def __repr__(self):
+        return f&quot;MLP of [{', '.join(str(layer) for layer in self.layers)}]&quot;
+</code></pre>
+<p>This will print a readable description like &quot;MLP of [Layer of [ReLUNeuron(2), ReLUNeuron(2)], Layer of [LinearNeuron(2)]]&quot;, showing the layers and their neuron types.</p>
+<h2>MLP in Action: A Complete Forward and Backward Pass</h2>
+<p>Let's create an <code>MLP</code> and put it through a full forward and backward pass. We'll use the example structure from the <code>micrograd</code> <code>README.md</code> demo, which is a common setup for binary classification.</p>
+<pre><code class="language-python">from micrograd.engine import Value
+from micrograd.nn import MLP
+
+# Create an MLP for binary classification:
+# - Takes 3 inputs (e.g., features x, y, z)
+# - First hidden layer has 4 neurons (ReLU activated)
+# - Second hidden layer has 4 neurons (ReLU activated)
+# - Output layer has 1 neuron (linear, for a raw score)
+model = MLP(nin=3, nouts=[4, 4, 1])
+
+print(model) # Inspect the network's structure
+print(f&quot;Total parameters in MLP: {len(model.parameters())}&quot;)
+
+# Provide a single input data point (a list of 3 Value objects)
+x_input = [Value(2.0), Value(3.0), Value(-1.0)]
+
+# Perform the forward pass to get the network's prediction
+y_pred = model(x_input)
+
+print(f&quot;\nMLP prediction (output data): {y_pred.data:.4f}&quot;)
+
+# Now, we would typically compare y_pred to a 'true' label (y_true)
+# and calculate a loss. For this example, let's just assume y_pred
+# is the final scalar we want to optimize.
+# We call backward() on the prediction itself.
+y_pred.backward()
+
+print(f&quot;\nGradients for a few parameters after backward pass:&quot;)
+# Inspect gradients for parameters in the first layer, first neuron
+print(f&quot;L1 N1 W0 grad: {model.layers[0].neurons[0].w[0].grad:.4f}&quot;)
+print(f&quot;L1 N1 W1 grad: {model.layers[0].neurons[0].w[1].grad:.4f}&quot;)
+print(f&quot;L1 N1 Bias grad: {model.layers[0].neurons[0].b.grad:.4f}&quot;)
+
+# Now reset all gradients in the entire network
+model.zero_grad()
+print(f&quot;\nGradients after zero_grad (L1 N1 W0): {model.layers[0].neurons[0].w[0].grad:.4f}&quot;)
+</code></pre>
+<p>Example Output (weights and gradients will vary due to random initialization):</p>
+<pre><code>MLP of [Layer of [ReLUNeuron(3), ReLUNeuron(3), ReLUNeuron(3), ReLUNeuron(3)], Layer of [ReLUNeuron(4), ReLUNeuron(4), ReLUNeuron(4), ReLUNeuron(4)], Layer of [LinearNeuron(4)]]
+Total parameters in MLP: 37
+
+MLP prediction (output data): -0.4704
+
+Gradients for a few parameters after backward pass:
+L1 N1 W0 grad: 0.0000
+L1 N1 W1 grad: 0.0000
+L1 N1 Bias grad: 0.0000
+
+Gradients after zero_grad (L1 N1 W0): 0.0000
+</code></pre>
+<p>In this particular random initialization, the specific neuron chosen in the example produced zero gradients. This could be due to ReLU clamping negative values to zero. However, the key takeaway is that <code>model.backward()</code> (implicitly called on <code>y_pred</code>) <em>would</em> correctly propagate gradients through the entire stacked network if the conditions allowed for non-zero derivatives. The subsequent call to <code>model.zero_grad()</code> then demonstrates its ability to reset all 37 parameters' gradients to zero, ready for the next optimization step.</p>
+<h2>The MLP's Sequential Computational Flow</h2>
+<p>The <code>MLP</code>'s structure is a classic example of a feedforward neural network, where information moves in one direction, from input to output, through multiple layers.</p>
+<pre class="mermaid">sequenceDiagram
+    participant Input as Input Data (List of Values)
+    participant L1 as Layer 1 (Hidden)
+    participant L2 as Layer 2 (Hidden)
+    participant L3 as Layer 3 (Output)
+    participant Output as Final Prediction (Value)
+
+    Input->>L1: '__call__ (x)'
+    Note over L1: Processes x in parallel with N neurons
+    L1->>L2: 'output of L1 becomes input for L2'
+    Note over L2: Processes L1's output
+    L2->>L3: 'output of L2 becomes input for L3'
+    Note over L3: Processes L2's output
+    L3->>Output: 'final Value from MLP'
+</pre>
+<p>This diagram simplifies the internal workings of each layer (which itself contains neurons and builds a complex graph), but it clearly shows the sequential nature of an MLP: data is transformed step-by-step as it moves from one <code>Layer</code> to the next, building a much larger computational graph that <code>micrograd</code> can traverse for backpropagation.</p>
+<h2>Conclusion: The <code>micrograd</code> Journey Complete</h2>
+<p>You've now successfully journeyed through the core concepts of <code>micrograd</code> and built a complete Multi-Layer Perceptron!</p>
+<ul>
+<li>You started with the humble <code>Value</code> object (<a href="01_value.html">Chapter 1: Value</a>), understanding how it wraps a number and, crucially, remembers its computational lineage.</li>
+<li>You then unlocked the magic of <code>backward()</code> (<a href="02_backward.html">Chapter 2: backward</a>), seeing how <code>micrograd</code> uses the chain rule to automatically calculate gradients across complex computational graphs.</li>
+<li>The <code>Module</code> class (<a href="03_module.html">Chapter 3: Module</a>) provided the organizational blueprint, allowing us to manage and reset gradients for thousands of parameters with ease.</li>
+<li>We then assembled the fundamental processing units: the <code>Neuron</code> (<a href="04_neuron.html">Chapter 4: Neuron</a>), which performs a weighted sum and activation, and the <code>Layer</code> (<a href="05_layer.html">Chapter 5: Layer</a>), which orchestrates multiple neurons for parallel feature extraction.</li>
+<li>Finally, in this chapter, you combined these <code>Layer</code>s to construct an <code>MLP</code>, a complete neural network capable of deep, sequential processing.</li>
+</ul>
+<p>With this understanding, you now grasp the foundational principles behind modern deep learning frameworks. You can create your own neural networks, feed them data, perform forward passes to get predictions, calculate gradients with <code>backward()</code>, and update parameters using an optimization algorithm (like Stochastic Gradient Descent, as hinted in the <code>README.md</code> demo notebook) to make your models learn.</p>
+<p>You've built your own miniature deep learning engine. The real fun begins now: applying <code>micrograd</code> to solve real-world problems and exploring how you can extend its capabilities!</p>
+
+  <nav class="chapter-nav">
+    <span><a href="05_layer.html">&larr; Layer</a></span>
+    <span>&nbsp;</span>
+  </nav>
+</body>
+</html>

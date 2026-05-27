@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>COMPUTE_DTYPE — nanochat</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; nanochat tour</a></p>
+<h1>Chapter 3: COMPUTE_DTYPE</h1>
+<p>In the previous chapter, we journeyed into the <a href="02_gpt.html">GPT</a> model, witnessing how it transforms numerical token IDs into meaningful, context-rich vectors and uses complex calculations to predict the next token. These calculations, involving matrix multiplications and activations across dozens of layers, require an immense number of floating-point operations. But here's a crucial question: how precise do these numbers need to be? Is it always necessary to perform calculations with maximum accuracy, or can we cut corners to save time and memory?</p>
+<p>Imagine you're an architect using a CAD program. You could design a building with measurements precise down to nanometers, but for a typical structure, millimeters or even centimeters are perfectly adequate. Over-precision in design would slow down your computer, consume vast amounts of memory, and yield little practical benefit. Similarly, in large language models, the <strong>COMPUTE_DTYPE</strong> is like choosing the precision level for our LLM's internal calculations. It defines how accurately numbers are stored and processed, a critical setting that directly impacts performance, memory usage, and numerical stability during both training and inference.</p>
+<p>Let's visualize where this precision setting fits into the overall flow:</p>
+<pre class="mermaid">sequenceDiagram
+    participant T as Tokenizer
+    participant NI as Numerical IDs
+    participant E as Embeddings
+    participant G as GPT
+    participant L as Logits
+    participant PT as Predicted Token
+
+    T->>NI: 'Hello' becomes [12345]
+    NI->>E: '12345' becomes a vector (COMPUTE_DTYPE)
+    E->>G: Processed by Transformer blocks (COMPUTE_DTYPE ops)
+    G->>L: Final output scores (COMPUTE_DTYPE, then cast to float32)
+    L->>PT: Softcapped, sampled (float32, then cast back)
+</pre>
+<h3>The Trade-offs of Precision</h3>
+<p>Why not always use the highest precision (like <code>float32</code>)? Because every bit of precision comes at a cost:</p>
+<ul>
+<li><strong><code>float32</code> (Single-precision float):</strong> This is the standard. It offers high accuracy but requires 32 bits per number. For billions of parameters and activations, this translates to slower operations and significant memory consumption.</li>
+<li><strong><code>bfloat16</code> (Brain float):</strong> A popular choice for modern LLMs, especially on NVIDIA A100/H100 GPUs. It uses 16 bits but maintains the <em>same exponent range</em> as <code>float32</code>. This means it can represent very large and very small numbers accurately (avoiding overflow/underflow), making it numerically stable for LLM training while being twice as fast and consuming half the memory of <code>float32</code>.</li>
+<li><strong><code>float16</code> (Half-precision float):</strong> Also 16 bits, but with a <em>smaller exponent range</em> than <code>float32</code>. While fast and memory-efficient, its limited range makes it more prone to numerical issues like gradient underflow during training, often requiring techniques like <code>GradScaler</code> to keep training stable.</li>
+<li><strong><code>float8</code> (Eighth-precision float):</strong> The cutting edge. Using only 8 bits, it offers unparalleled speed and memory savings. However, it requires specialized hardware (like NVIDIA H100+ GPUs) and careful implementation to ensure numerical stability.</li>
+</ul>
+<p><code>nanochat</code> offers a flexible approach to managing <code>COMPUTE_DTYPE</code>, defaulting to sensible options based on your hardware but allowing explicit overrides.</p>
+<h3><code>nanochat</code>'s Precision Management</h3>
+<p>Instead of relying on PyTorch's automatic mixed precision (<code>torch.amp.autocast</code>), <code>nanochat</code> explicitly controls precision through a single global <code>COMPUTE_DTYPE</code>. This provides full transparency and fine-grained control over numerical operations.</p>
+<p>You can find the core logic for <code>COMPUTE_DTYPE</code> in <code>nanochat/common.py</code>, which is then referenced throughout the codebase.</p>
+<pre><code class="language-python"># nanochat/common.py
+
+# ... (imports)
+
+# Set the default compute dtype and provide a reason for it
+if device_type == &quot;cuda&quot; and torch.cuda.get_device_capability()[0] &gt;= 8:
+    COMPUTE_DTYPE = torch.bfloat16 # A100, H100+ have native bf16 tensor cores
+    COMPUTE_DTYPE_REASON = &quot;CUDA SM 80+ detected (A100, H100)&quot;
+elif device_type == &quot;cuda&quot;:
+    COMPUTE_DTYPE = torch.float32 # V100, T4, etc. - fp32 or manual fp16 + GradScaler
+    COMPUTE_DTYPE_REASON = &quot;CUDA SM &lt; 80 detected (V100, T4)&quot;
+else:
+    COMPUTE_DTYPE = torch.float32 # CPU, MPS - no reduced-precision tensor cores
+    COMPUTE_DTYPE_REASON = &quot;Non-CUDA device (CPU, MPS)&quot;
+</code></pre>
+<p>As indicated in the <code>README.md</code>, <code>nanochat</code> intelligently auto-detects the optimal <code>COMPUTE_DTYPE</code> for your hardware:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Hardware</th>
+<th style="text-align:left">Default dtype</th>
+<th style="text-align:left">Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">CUDA SM 80+ (A100, H100, ...)</td>
+<td style="text-align:left"><code>bfloat16</code></td>
+<td style="text-align:left">Native bf16 tensor cores</td>
+</tr>
+<tr>
+<td style="text-align:left">CUDA SM &lt; 80 (V100, T4, ...)</td>
+<td style="text-align:left"><code>float32</code></td>
+<td style="text-align:left">No bf16; fp16 available via <code>NANOCHAT_DTYPE=float16</code> (uses GradScaler)</td>
+</tr>
+<tr>
+<td style="text-align:left">CPU / MPS</td>
+<td style="text-align:left"><code>float32</code></td>
+<td style="text-align:left">No reduced-precision tensor cores</td>
+</tr>
+</tbody>
+</table>
+<p>You can override this default using the <code>NANOCHAT_DTYPE</code> environment variable:</p>
+<pre><code class="language-bash">NANOCHAT_DTYPE=float32 python -m scripts.chat_cli -p &quot;hello&quot;   # force fp32
+NANOCHAT_DTYPE=bfloat16 torchrun --nproc_per_node=8 -m scripts.base_train  # force bf16
+</code></pre>
+<h3>How <code>nanochat</code> implements mixed precision:</h3>
+<ol>
+<li>
+<p><strong>Weights stored in <code>float32</code>, but cast during forward pass:</strong> For numerical stability during optimization (which we'll cover in a later chapter on <a href="05_muonadamw.html">MuonAdamW</a>), model weights (especially in <code>Linear</code> layers) are kept in <code>float32</code> &quot;master weights.&quot; However, during the forward pass, they are converted to <code>COMPUTE_DTYPE</code> just before the matrix multiplication.</p>
+<p>This is handled by <code>nanochat</code>'s custom <code>Linear</code> layer in <code>nanochat/gpt.py</code>:</p>
+<pre><code class="language-python"># nanochat/gpt.py
+
+class Linear(nn.Linear):
+    &quot;&quot;&quot;nn.Linear that casts weights to match input dtype in forward.
+    Replaces autocast: master weights stay fp32 for optimizer precision,
+    but matmuls run in the activation dtype (typically bf16 from embeddings).&quot;&quot;&quot;
+    def forward(self, x):
+        return F.linear(x, self.weight.to(dtype=x.dtype))
+</code></pre>
+</li>
+<li>
+<p><strong>Embeddings stored directly in <code>COMPUTE_DTYPE</code> (mostly):</strong> The word token embeddings (<code>wte</code>) and value embeddings (<code>value_embeds</code>) are large and consume significant memory. <code>nanochat</code> stores these directly in <code>COMPUTE_DTYPE</code> to save memory, except when <code>COMPUTE_DTYPE</code> is <code>float16</code>. <code>float16</code> requires <code>GradScaler</code>, which needs embeddings to be in <code>float32</code> to correctly unscale gradients.</p>
+<p>This explicit casting happens in <code>GPT.init_weights()</code>:</p>
+<pre><code class="language-python"># nanochat/gpt.py
+
+class GPT(nn.Module):
+    # ... (init)
+
+    @torch.no_grad()
+    def init_weights(self):
+        # ... (other initializations)
+
+        # Cast embeddings to COMPUTE_DTYPE: optimizer can tolerate reduced-precision
+        # embeddings and it saves memory. Exception: fp16 requires fp32 embeddings
+        # because GradScaler cannot unscale fp16 gradients.
+        if COMPUTE_DTYPE != torch.float16:
+            self.transformer.wte.to(dtype=COMPUTE_DTYPE)
+            for ve in self.value_embeds.values():
+                ve.to(dtype=COMPUTE_DTYPE)
+</code></pre>
+</li>
+<li>
+<p><strong>Logits cast to <code>float32</code> for stability:</strong> The final output of the model, called <code>logits</code>, represents unnormalized scores for each possible next token. These values can vary widely, so they are explicitly cast to <code>float32</code> before applying a <code>softcap</code> (squashing them into a stable range) and computing the loss. This helps maintain numerical stability during the critical loss calculation.</p>
+<pre><code class="language-python"># nanochat/gpt.py
+
+class GPT(nn.Module):
+    # ... (other methods)
+
+    def forward(self, idx, targets=None, kv_cache=None, loss_reduction='mean'):
+        # ... (transformer blocks processing)
+
+        x = norm(x) # Final normalization before lm_head
+
+        # Forward the lm_head (compute logits)
+        softcap = 15 # smoothly cap the logits
+        logits = self.lm_head(x) # (B, T, padded_vocab_size)
+        logits = logits[..., :self.config.vocab_size] # Slice to remove padding
+        logits = logits.float() # Switch to fp32 for logit softcap and loss computation
+        logits = softcap * torch.tanh(logits / softcap) # Squash the logits
+        # ...
+</code></pre>
+</li>
+<li>
+<p><strong><code>GradScaler</code> for <code>float16</code> training:</strong> As mentioned, <code>float16</code> can suffer from gradient underflow. To counteract this, <code>nanochat</code> automatically enables <code>torch.amp.GradScaler</code> when <code>COMPUTE_DTYPE</code> is <code>float16</code> (e.g., if you override it via <code>NANOCHAT_DTYPE=float16</code>). The <code>GradScaler</code> dynamically scales loss values to prevent gradients from becoming too small during backpropagation.</p>
+<p>You can see this in action in <code>scripts/base_train.py</code>:</p>
+<pre><code class="language-python"># scripts/base_train.py
+
+# ... (compute init)
+print0(f&quot;COMPUTE_DTYPE: {COMPUTE_DTYPE} ({COMPUTE_DTYPE_REASON})&quot;)
+
+# GradScaler for fp16 training (bf16/fp32 don't need it — bf16 has the same exponent range as fp32)
+scaler = torch.amp.GradScaler() if COMPUTE_DTYPE == torch.float16 else None
+if scaler is not None:
+    print0(&quot;GradScaler enabled for fp16 training&quot;)
+</code></pre>
+</li>
+<li>
+<p><strong><code>float8</code> support for advanced GPUs:</strong> For NVIDIA H100+ GPUs, <code>nanochat</code> includes experimental support for <code>float8</code> training. This is enabled with the <code>--fp8</code> flag, as seen in the <code>speedrun.sh</code> script:</p>
+<pre><code class="language-bash"># runs/speedrun.sh
+# ...
+torchrun --standalone --nproc_per_node=8 -m scripts.base_train -- --depth=24 --target-param-data-ratio=8 --device-batch-size=16 --fp8 --run=$WANDB_RUN
+# ...
+</code></pre>
+<p>The <code>nanochat/fp8.py</code> file provides a minimalist <code>Float8Linear</code> implementation that wraps PyTorch's <code>torch._scaled_mm</code> (the underlying FP8 CUDA kernel). This allows for efficient FP8 computation without relying on the more complex <code>torchao</code> library, striking a balance between cutting-edge performance and code simplicity.</p>
+</li>
+</ol>
+<p>By carefully managing <code>COMPUTE_DTYPE</code>, <code>nanochat</code> ensures that training and inference are as efficient as possible, leveraging the latest hardware capabilities without sacrificing numerical stability. This optimization is crucial for achieving high throughput and reducing the cost of running large language models.</p>
+<p>But feeding numerical IDs to the GPT model and processing them efficiently is only half the battle. How do we get these vast quantities of tokenized data to the model in the first place? How are multi-gigabyte datasets loaded, shuffled, and presented to the GPU efficiently in batches? That's the domain of the next chapter, where we'll explore <code>nanochat</code>'s sophisticated <a href="04_dataloader.html">DataLoader</a>.</p>
+
+  <nav class="chapter-nav">
+    <span><a href="02_gpt.html">&larr; GPT</a></span>
+    <span><a href="04_dataloader.html">DataLoader &rarr;</a></span>
+  </nav>
+</body>
+</html>

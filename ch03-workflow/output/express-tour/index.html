@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>express tour</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <h1>express</h1>
+  <p class="muted">Lens: <span class="lens">beginner-tutorial</span> &middot; 7 chapters &middot; 8 files analyzed</p>
+  <p>This codebase implements the core components of the Express.js web framework, providing a robust foundation for building web applications and APIs. It abstracts away the complexities of raw HTTP, offering tools for routing requests, managing responses, and integrating templating engines.</p>
+
+  <h2>Architecture map</h2>
+  <pre class="mermaid">
+flowchart TD
+    A0["app"]
+    A1["req"]
+    A2["res"]
+    A3["Middleware"]
+    A4["Router"]
+    A5["Route"]
+    A6["View"]
+    A0 -- "creates" --> A4
+    A0 -- "handles" --> A1
+    A0 -- "handles" --> A2
+    A0 -- "employs" --> A3
+    A0 -- "configures" --> A6
+    A4 -- "defines" --> A5
+    A5 -- "stacks" --> A3
+    A3 -- "accesses" --> A1
+    A3 -- "modifies" --> A2
+    A6 -- "provides rendering for" --> A0
+    A2 -- "sends output from" --> A6
+  </pre>
+
+  <h2>Read in order</h2>
+  <ol>
+    <li><a href="01_app.html">app</a></li>
+    <li><a href="02_req.html">req</a></li>
+    <li><a href="03_res.html">res</a></li>
+    <li><a href="04_middleware.html">Middleware</a></li>
+    <li><a href="05_router.html">Router</a></li>
+    <li><a href="06_route.html">Route</a></li>
+    <li><a href="07_view.html">View</a></li>
+  </ol>
+
+  <h2>Files the LLM picked</h2>
+<p>This codebase defines the core Express.js web framework, enabling the creation of web applications and APIs in Node.js. Its architecture is fundamentally structured around an application object that orchestrates the request-response cycle, complemented by distinct prototypes for request (<code>req</code>), response (<code>res</code>), and a view rendering subsystem. The selection prioritizes the main entry points and the foundational files that define these core components, along with essential utility functions, to grasp how requests are processed, routed, and responded to within the framework. Ancillary configuration files, documentation, and non-representative CI definitions were excluded to concentrate on the functional core.</p>
+
+  <ul class="files">
+    <li><code>index.js</code></li>
+    <li><code>.github/workflows/ci.yml</code></li>
+    <li><code>lib/application.js</code></li>
+    <li><code>lib/express.js</code></li>
+    <li><code>lib/request.js</code></li>
+    <li><code>lib/response.js</code></li>
+    <li><code>lib/utils.js</code></li>
+    <li><code>lib/view.js</code></li>
+  </ul>
+</body>
+</html>

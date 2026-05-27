@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>nanochat tour</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <h1>nanochat</h1>
+  <p class="muted">Lens: <span class="lens">beginner-tutorial</span> &middot; 9 chapters &middot; 20 files analyzed</p>
+  <p>nanochat is an experimental harness for training large language models on a single GPU node. It simplifies the entire LLM lifecycle, from tokenization and pretraining to finetuning, evaluation, and inference, aiming for minimal, hackable code.</p>
+
+  <h2>Architecture map</h2>
+  <pre class="mermaid">
+flowchart TD
+    A0["Tokenizer"]
+    A1["GPTConfig"]
+    A2["GPT"]
+    A3["DataLoader"]
+    A4["Optimizer"]
+    A5["Checkpoint"]
+    A6["Training Script"]
+    A7["Task"]
+    A8["Engine"]
+    A1 -- "defines blueprint for" --> A2
+    A2 -- "is adjusted by" --> A4
+    A2 -- "receives data from" --> A3
+    A2 -- "is evaluated by" --> A7
+    A2 -- "is run by" --> A8
+    A0 -- "converts text for" --> A3
+    A0 -- "decodes output for" --> A8
+    A4 -- "state is saved to" --> A5
+    A5 -- "stores state of" --> A2
+    A6 -- "orchestrates training of" --> A2
+    A6 -- "controls data flow for" --> A3
+    A6 -- "configures" --> A4
+    A6 -- "manages" --> A5
+    A6 -- "uses for evaluation" --> A7
+    A6 -- "adjusts parameters via" --> A1
+    A6 -- "trains and evaluates" --> A0
+    A6 -- "uses for sampling" --> A8
+    A8 -- "solves problems for" --> A7
+  </pre>
+
+  <h2>Read in order</h2>
+  <ol>
+    <li><a href="01_tokenizer.html">Tokenizer</a></li>
+    <li><a href="02_gptconfig.html">GPTConfig</a></li>
+    <li><a href="03_gpt.html">GPT</a></li>
+    <li><a href="04_dataloader.html">DataLoader</a></li>
+    <li><a href="05_optimizer.html">Optimizer</a></li>
+    <li><a href="06_checkpoint.html">Checkpoint</a></li>
+    <li><a href="07_training_script.html">Training Script</a></li>
+    <li><a href="08_task.html">Task</a></li>
+    <li><a href="09_engine.html">Engine</a></li>
+  </ol>
+
+  <h2>Files the LLM picked</h2>
+<p>This codebase implements a full-stack LLM training and serving pipeline. The core architecture revolves around a custom GPT model, specialized optimizers, efficient data loading, and a multi-stage training (pretraining, supervised finetuning, reinforcement learning) and evaluation process, culminating in a chat UI. My selection rule was to prioritize the main entry points for each major stage of the LLM lifecycle (training, finetuning, evaluation, serving) and then identify the core underlying modules that define the LLM's architecture, data handling, and performance optimizations. I also included representative task implementations to illustrate evaluation mechanics and tool use.</p>
+  <ul class="files">
+    <li><code>README.md</code></li>
+    <li><code>runs/speedrun.sh</code></li>
+    <li><code>scripts/base_eval.py</code></li>
+    <li><code>scripts/base_train.py</code></li>
+    <li><code>scripts/chat_eval.py</code></li>
+    <li><code>scripts/chat_rl.py</code></li>
+    <li><code>scripts/chat_sft.py</code></li>
+    <li><code>scripts/chat_web.py</code></li>
+    <li><code>nanochat/checkpoint_manager.py</code></li>
+    <li><code>nanochat/common.py</code></li>
+    <li><code>nanochat/dataset.py</code></li>
+    <li><code>nanochat/engine.py</code></li>
+    <li><code>nanochat/execution.py</code></li>
+    <li><code>nanochat/flash_attention.py</code></li>
+    <li><code>nanochat/fp8.py</code></li>
+    <li><code>nanochat/gpt.py</code></li>
+    <li><code>nanochat/optim.py</code></li>
+    <li><code>nanochat/tokenizer.py</code></li>
+    <li><code>tasks/gsm8k.py</code></li>
+    <li><code>tasks/humaneval.py</code></li>
+  </ul>
+</body>
+</html>

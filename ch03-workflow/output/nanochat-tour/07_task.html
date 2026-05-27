@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Task — nanochat</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; nanochat tour</a></p>
+<h1>Chapter 7: Task</h1>
+<p>Imagine you've spent days meticulously training your <code>nanochat</code> model, refining its <a href="02_gpt.html">GPT</a> architecture and feeding it endless data through your optimized <a href="04_dataloader.html">DataLoader</a>. Now you want to know: is it actually <em>smart</em>? Can it answer math problems, follow instructions, or correctly spell words? How do you give it a specific test, objectively grade its performance, and know if it genuinely understands the challenge?</p>
+<p>This is where the <strong>Task</strong> abstraction comes in. A <code>Task</code> is like a carefully designed exam for your LLM. It defines a specific problem set (e.g., a collection of math problems, multiple-choice questions, or coding challenges), along with clear instructions on how the model should respond, and a precise method for judging whether its answer is correct. It's the blueprint for evaluating and, in some cases, even training the model on specific capabilities.</p>
+<pre class="mermaid">sequenceDiagram
+    participant TA as Task
+    participant TM as TaskMixture
+    participant TO as Tokenizer
+    participant GM as GPT Model
+    participant EV as Evaluator
+
+    TA->>GM: 'Here is a question (formatted)'
+    GM->>TO: 'Generates token IDs (response)'
+    TO->>EV: 'Decodes response (text)'
+    EV->>TA: 'Judges correctness'
+    TA-->>TM: 'Aggregate results'
+    TM-->>GM: 'Guides training'
+</pre>
+<p>In <code>nanochat</code>, tasks are defined in the <code>tasks/</code> directory. They provide a standardized interface that allows different training and evaluation scripts to interact with diverse datasets in a consistent manner.</p>
+<h3>The Foundation: The <code>Task</code> Base Class</h3>
+<p>All specific tasks in <code>nanochat</code> inherit from the <code>Task</code> base class, found in <code>tasks/common.py</code>. This class establishes the fundamental contract for any challenge we want to pose to our LLM.</p>
+<pre><code class="language-python"># tasks/common.py
+
+class Task:
+    &quot;&quot;&quot;
+    Base class of a Task. Allows for lightweight slicing of the underlying dataset.
+    &quot;&quot;&quot;
+    def __init__(self, start=0, stop=None, step=1):
+        # ... (slicing logic)
+        pass
+
+    @property
+    def eval_type(self):
+        # one of 'generative' | 'categorical'
+        raise NotImplementedError
+
+    def num_examples(self):
+        raise NotImplementedError
+
+    def get_example(self, index):
+        raise NotImplementedError
+
+    def __len__(self):
+        # ... (length calculation)
+        pass
+
+    def __getitem__(self, index: int):
+        # ... (access example by index)
+        pass
+
+    def evaluate(self, problem, completion):
+        raise NotImplementedError
+</code></pre>
+<p>Key aspects of the <code>Task</code> base class:</p>
+<ul>
+<li><strong><code>eval_type</code></strong>: This property is crucial. It categorizes the task as either <code>'generative'</code> (where the model generates a free-form response, like answering a math problem) or <code>'categorical'</code> (where the model chooses from a set of predefined options, like multiple-choice questions). This distinction significantly impacts how the model is evaluated.</li>
+<li><strong><code>num_examples()</code> and <code>get_example(index)</code></strong>: These methods provide access to the dataset. They allow <code>nanochat</code> to fetch individual problems or conversations from the task's dataset. The <code>__len__</code> and <code>__getitem__</code> methods make tasks behave like standard Python lists or datasets.</li>
+<li><strong><code>evaluate(problem, completion)</code></strong>: This is the core logic for judging correctness. Given the original <code>problem</code> and the model's <code>completion</code> (its generated answer), this method returns a numerical score (typically 0 for incorrect, 1 for correct).</li>
+</ul>
+<h3>Combining Tasks: <code>TaskMixture</code> and <code>TaskSequence</code></h3>
+<p>Just as you might prepare for an exam by practicing different types of problems, LLMs benefit from training on a diverse set of tasks. <code>nanochat</code> provides two special <code>Task</code> subclasses for this purpose:</p>
+<ol>
+<li>
+<p><strong><code>TaskMixture</code></strong>:</p>
+<ul>
+<li><strong>Analogy</strong>: A shuffled playlist of practice problems.</li>
+<li>This class takes a list of other <code>Task</code> objects and combines them into a single, larger dataset. When you request an example from a <code>TaskMixture</code>, it randomly (but deterministically, for reproducibility) samples from any of the underlying tasks. This is ideal for supervised fine-tuning (SFT) to expose the model to a wide range of abilities simultaneously.</li>
+</ul>
+<pre><code class="language-python"># tasks/common.py
+
+class TaskMixture(Task):
+    def __init__(self, tasks, **kwargs):
+        super().__init__(**kwargs)
+        self.tasks = tasks
+        # ... (shuffles indices from all tasks)
+
+    def get_example(self, index):
+        # ... returns a randomly selected example from one of the sub-tasks
+        pass
+</code></pre>
+</li>
+<li>
+<p><strong><code>TaskSequence</code></strong>:</p>
+<ul>
+<li><strong>Analogy</strong>: A structured curriculum.</li>
+<li>This class concatenates tasks sequentially. You first train on all examples from Task A, then all from Task B, and so on. This is useful for curriculum learning or multi-stage training.</li>
+</ul>
+<pre><code class="language-python"># tasks/common.py
+
+class TaskSequence(Task):
+    def __init__(self, tasks, **kwargs):
+        super().__init__(**kwargs)
+        self.tasks = tasks
+        # ... (simply concatenates tasks)
+
+    def get_example(self, index):
+        # ... returns example from tasks in sequential order
+        pass
+</code></pre>
+</li>
+</ol>
+<h3>Standardized Formatting: <code>render_mc</code></h3>
+<p>For tasks that involve multiple-choice questions, consistency in prompt formatting is vital, especially for smaller models. The <code>render_mc</code> helper function ensures that multiple-choice questions are always presented to the LLM in a uniform, clear way.</p>
+<pre><code class="language-python"># tasks/common.py
+
+def render_mc(question, letters, choices):
+    &quot;&quot;&quot;
+    The common multiple choice rendering format we will use.
+    ... (formatting logic)
+    &quot;&quot;&quot;
+    query = f&quot;Multiple Choice question: {question}\n&quot;
+    query += &quot;&quot;.join([f&quot;- {choice}={letter}\n&quot; for letter, choice in zip(letters, choices)])
+    query += &quot;\nRespond only with the letter of the correct answer.&quot;
+    return query
+</code></pre>
+<p>As highlighted in the code, <code>nanochat</code> makes specific choices here, like placing the answer <code>letter</code> <em>after</em> the <code>choice</code> (e.g., <code>- Choice A=A</code>) and removing whitespace between the <code>=</code> and the letter. These seemingly minor details are crucial because the <a href="01_tokenizer.html">Tokenizer</a> might assign different IDs to &quot; A&quot; versus &quot;A&quot;, and we want the model to learn to generate the exact token for the answer.</p>
+<h3>Real-world Examples: Diving into Specific Tasks</h3>
+<p>Let's look at how specific challenges are implemented as <code>Task</code> subclasses in <code>nanochat</code>:</p>
+<ul>
+<li>
+<p><strong><code>GSM8K</code> (Grade School Math 8K):</strong> (from <code>tasks/gsm8k.py</code>)</p>
+<ul>
+<li><strong><code>eval_type</code>: <code>'generative'</code></strong>. The model must generate a step-by-step solution culminating in a numerical answer.</li>
+<li><strong>Tool Use</strong>: <code>GSM8K</code> problems often involve the model invoking a Python calculator (e.g., <code>&lt;&lt;0.2*50=10&gt;&gt;</code>). The <code>get_example</code> method parses these tool calls from the raw dataset into structured <code>content</code> lists for the assistant's message.</li>
+<li><strong>Evaluation</strong>: The <code>evaluate</code> method uses a regular expression (<code>GSM_RE</code>) to extract the final numerical answer from both the ground truth and the model's generated response, then compares them. It also provides a <code>reward</code> method for Reinforcement Learning (RL) training.</li>
+</ul>
+</li>
+<li>
+<p><strong><code>MMLU</code> (Massive Multitask Language Understanding):</strong> (from <code>tasks/mmlu.py</code>)</p>
+<ul>
+<li><strong><code>eval_type</code>: <code>'categorical'</code></strong>. The model selects from multiple-choice options across various academic subjects.</li>
+<li><strong><code>render_mc</code></strong>: This task heavily utilizes the <code>render_mc</code> helper to present questions consistently.</li>
+<li><strong>Evaluation</strong>: Since it's categorical, evaluation can be highly optimized. The <code>scripts/chat_eval.py</code> script doesn't generate full text responses; instead, it directly examines the model's <em>logits</em> (unnormalized scores from the <a href="02_gpt.html">GPT</a>'s <code>lm_head</code>) for the available answer letters, picking the highest-scoring one. This is much faster.</li>
+</ul>
+</li>
+<li>
+<p><strong><code>SpellingBee</code></strong>: (from <code>tasks/spellingbee.py</code>)</p>
+<ul>
+<li><strong><code>eval_type</code>: <code>'generative'</code></strong>. Simple tasks like &quot;Spell the word 'apple'&quot; or &quot;How many 'r' are in 'strawberry'?&quot;</li>
+<li><strong>Evaluation</strong>: Compares the model's generated text to the expected answer.</li>
+</ul>
+</li>
+</ul>
+<h3>Tasks in Action: Training and Evaluation</h3>
+<p><code>Task</code> objects are central to many stages of the <code>nanochat</code> pipeline:</p>
+<ul>
+<li>
+<p><strong>Supervised Fine-tuning (SFT) (<code>scripts/chat_sft.py</code>):</strong></p>
+<ul>
+<li>The <code>scripts/chat_sft.py</code> script uses a <code>TaskMixture</code> to train the model on a rich blend of conversations, <code>MMLU</code> problems (to teach multiple-choice reasoning), <code>GSM8K</code> problems (to teach math and tool use), and <code>SpellingBee</code> tasks.</li>
+<li>The <code>sft_data_generator_bos_bestfit</code> (a specialized <a href="04_dataloader.html">DataLoader</a>) takes conversation objects from this <code>TaskMixture</code> and, using <code>tokenizer.render_conversation</code>, generates both <code>ids</code> and a <code>mask</code>. Crucially, this <code>mask</code> ensures the model only learns to predict tokens for the <em>assistant's responses</em>, not the user's prompts or tool outputs.</li>
+</ul>
+</li>
+<li>
+<p><strong>Evaluation (<code>scripts/chat_eval.py</code>):</strong></p>
+<ul>
+<li>This script orchestrates the model's assessment on various tasks. It dynamically selects the appropriate evaluation loop (<code>run_generative_eval</code> or <code>run_categorical_eval</code>) based on the <code>task_object.eval_type</code>.</li>
+<li>For generative tasks, it uses the <a href="08_engine.html">Engine</a> to sample multiple completions. For categorical tasks, it efficiently queries logits for answer choices.</li>
+<li>The results from multiple tasks are then combined to compute the <code>ChatCORE</code> metric, a composite score reflecting the model's overall conversational and reasoning abilities.</li>
+</ul>
+</li>
+<li>
+<p><strong>Reinforcement Learning (RL) (<code>scripts/chat_rl.py</code>):</strong></p>
+<ul>
+<li>In <code>scripts/chat_rl.py</code>, tasks like <code>GSM8K</code> provide the <code>reward</code> signal that guides the model's learning. The <code>get_batch</code> function performs rollouts, generating multiple samples for a given problem, and then uses the task's <code>reward</code> method to score each sample. This reward (or advantage) is then used by the <a href="05_muonadamw.html">MuonAdamW</a> optimizer to improve the model's policy.</li>
+</ul>
+</li>
+</ul>
+<p>The <code>Task</code> abstraction, therefore, serves as the standardized interface through which <code>nanochat</code> defines, presents, and judges the challenges that shape its LLM's intelligence. It's the critical link between raw data and measurable capability.</p>
+<p>With the <code>Task</code> fully understood, we now have all the components for training and evaluating our LLM. But what about actually <em>using</em> the model for interactive chat or complex multi-turn reasoning, taking advantage of all the optimizations we've built? That's the role of the <code>Engine</code>, which we'll explore in the final chapter.</p>
+
+  <nav class="chapter-nav">
+    <span><a href="06_checkpointmanager.html">&larr; CheckpointManager</a></span>
+    <span><a href="08_engine.html">Engine &rarr;</a></span>
+  </nav>
+</body>
+</html>

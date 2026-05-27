@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>url_for — flask</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; flask tour</a></p>
+<h1>Chapter 6: url_for</h1>
+<p>Imagine you're designing a sprawling city, and you need to put up signs guiding people to different landmarks: the library, the park, the museum. If you hardcode signs that say &quot;Library: Go down Elm Street, take a left on Oak Avenue, then right on Maple Drive,&quot; what happens if you decide to move the library to a different location? All your signs would be instantly wrong, and your citizens would be lost.</p>
+<p>In web applications, hardcoding URLs is like hardcoding those street directions. If you write links in your HTML like <code>&lt;a href=&quot;/users/profile/123&quot;&gt;My Profile&lt;/a&gt;</code>, and then later decide to change the URL pattern for user profiles to <code>/profile/user/123</code>, all your existing links will break, leading to frustrating &quot;404 Not Found&quot; errors. This is where Flask's <code>url_for</code> function comes to the rescue.</p>
+<p><code>url_for</code> is Flask's smart navigation system. Instead of giving it explicit street directions (a hardcoded path), you give it the <em>name</em> of the landmark (your view function's endpoint), and it dynamically figures out the correct, up-to-date directions (the URL). It's like having a digital map that always knows where the library is, even if it moves.</p>
+<p>This flexibility is a huge advantage:</p>
+<ul>
+<li><strong>Maintainability</strong>: If you change a route's URL pattern, <code>url_for</code> automatically generates the new correct URL everywhere you use it, without you having to manually update dozens or hundreds of links.</li>
+<li><strong>Readability</strong>: Your code refers to view functions by their logical names, making it easier to understand what a link is pointing to.</li>
+<li><strong>Consistency</strong>: <code>url_for</code> handles details like URL prefixes (which we'll see more of in <a href="08_blueprint.html">Chapter 8: Blueprint</a>) and external vs. internal URLs, ensuring consistency across your application.</li>
+</ul>
+<p>Let's see how this &quot;smart navigator&quot; works.</p>
+<h3>Basic Usage: Linking to View Functions</h3>
+<p>Every time you define a route with <code>@app.route()</code>, you're implicitly giving that view function a <em>name</em>, also known as an <strong>endpoint</strong>. By default, this endpoint is the name of the Python function itself. You then pass this endpoint name to <code>url_for</code>.</p>
+<pre><code class="language-python">from flask import Flask, url_for
+
+app = Flask(__name__)
+
+@app.route(&quot;/&quot;)
+def index():
+    return f'Go to &lt;a href=&quot;{url_for(&quot;about&quot;)}&quot;&gt;About Us&lt;/a&gt;'
+
+@app.route(&quot;/about&quot;)
+def about():
+    return f'Go back to &lt;a href=&quot;{url_for(&quot;index&quot;)}&quot;&gt;Home&lt;/a&gt;'
+
+if __name__ == &quot;__main__&quot;:
+    app.run(debug=True)
+</code></pre>
+<p>In this example:</p>
+<ul>
+<li><code>url_for(&quot;about&quot;)</code> generates the URL for the <code>about</code> view function, which is <code>/about</code>.</li>
+<li><code>url_for(&quot;index&quot;)</code> generates the URL for the <code>index</code> view function, which is <code>/</code>.</li>
+</ul>
+<p>If you were to later change <code>@app.route(&quot;/about&quot;)</code> to <code>@app.route(&quot;/our-story&quot;)</code>, <code>url_for(&quot;about&quot;)</code> would automatically start generating <code>/our-story</code>, and your links would never break!</p>
+<h3>URLs with Variables: Providing Dynamic Data</h3>
+<p>Many URLs in a web application contain dynamic parts, like user IDs or product slugs. Flask's routing mechanism handles these with variable rules, and <code>url_for</code> knows how to fill them in.</p>
+<pre><code class="language-python">from flask import Flask, url_for
+
+app = Flask(__name__)
+
+@app.route(&quot;/user/&lt;username&gt;&quot;)
+def user_profile(username):
+    return f&quot;Hello, {username}! Visit &lt;a href='{url_for('product_detail', product_id=123)}'&gt;Product 123&lt;/a&gt;.&quot;
+
+@app.route(&quot;/product/&lt;int:product_id&gt;&quot;)
+def product_detail(product_id):
+    return f&quot;Product ID: {product_id}. See &lt;a href='{url_for('user_profile', username='Alice')}'&gt;Alice's profile&lt;/a&gt;.&quot;
+
+if __name__ == &quot;__main__&quot;:
+    app.run(debug=True)
+</code></pre>
+<p>Here:</p>
+<ul>
+<li>The <code>user_profile</code> endpoint expects a <code>username</code> variable. When calling <code>url_for('user_profile', username='Alice')</code>, Flask constructs <code>/user/Alice</code>.</li>
+<li>The <code>product_detail</code> endpoint expects an <code>int:product_id</code> variable. <code>url_for('product_detail', product_id=123)</code> constructs <code>/product/123</code>.</li>
+</ul>
+<p><code>url_for</code> takes these dynamic parts as keyword arguments, matching them to the variable names defined in your route.</p>
+<h3>Adding Query Parameters: Filtering and Sorting</h3>
+<p>What if you need to add query parameters (the <code>?key=value&amp;another=value</code> part of a URL) for things like search queries, pagination, or sorting? <code>url_for</code> handles this too. Any extra keyword arguments you pass to <code>url_for</code> that <em>don't</em> match a variable in the URL rule will automatically be appended as query parameters.</p>
+<pre><code class="language-python">from flask import Flask, url_for, request
+
+app = Flask(__name__)
+
+@app.route(&quot;/products&quot;)
+def product_list():
+    # Example: /products?category=electronics&amp;sort=price
+    category = request.args.get(&quot;category&quot;, &quot;All&quot;)
+    sort_by = request.args.get(&quot;sort&quot;, &quot;name&quot;)
+    
+    # Link to another view, passing current category and different sort
+    next_sort_link = url_for(&quot;product_list&quot;, category=category, sort=&quot;price_desc&quot;)
+
+    return f&quot;Displaying {category} products, sorted by {sort_by}. &lt;a href='{next_sort_link}'&gt;Sort by Price Desc&lt;/a&gt;&quot;
+
+if __name__ == &quot;__main__&quot;:
+    app.run(debug=True)
+</code></pre>
+<p>If you visit <code>/products?category=clothing</code>, then <code>url_for(&quot;product_list&quot;, category=category, sort=&quot;price_desc&quot;)</code> would generate <code>/products?category=clothing&amp;sort=price_desc</code>.</p>
+<h3>Generating External URLs: Full Paths</h3>
+<p>Sometimes you need a complete, absolute URL, including the scheme (<code>http://</code> or <code>https://</code>) and the domain (<code>example.com</code>). This is common when sending emails with links, providing callbacks for APIs, or generating RSS feeds. For this, <code>url_for</code> accepts the <code>_external=True</code> argument.</p>
+<pre><code class="language-python">from flask import Flask, url_for
+
+app = Flask(__name__)
+app.config[&quot;SERVER_NAME&quot;] = &quot;localhost:5000&quot; # Important for external URLs
+
+@app.route(&quot;/welcome&quot;)
+def welcome():
+    # This will generate http://localhost:5000/welcome (or https if configured)
+    full_url = url_for(&quot;welcome&quot;, _external=True)
+    
+    # You can also force a scheme
+    secure_url = url_for(&quot;welcome&quot;, _external=True, _scheme=&quot;https&quot;)
+    
+    return f&quot;External URL: {full_url}&lt;br&gt;Secure URL: {secure_url}&quot;
+
+if __name__ == &quot;__main__&quot;:
+    app.run(debug=True)
+</code></pre>
+<p>Notice that we set <code>app.config[&quot;SERVER_NAME&quot;]</code>. For <code>url_for</code> to generate external URLs <em>outside</em> of an active HTTP request (e.g., in a CLI script or background task), Flask needs to know the domain. This is why configuring <code>SERVER_NAME</code> (as we discussed in <a href="02_config.html">Chapter 2: Config</a>) is crucial for robust external URL generation. Inside an active request, Flask can often infer the server name from the incoming <code>Request</code> object (<a href="03_request.html">Chapter 3: Request</a>).</p>
+<h3><code>url_for</code> and Blueprints: Relative Endpoints</h3>
+<p>While we'll dive deeper into <a href="08_blueprint.html">Chapter 8: Blueprint</a>, it's worth noting how <code>url_for</code> interacts with them. When you organize your application into blueprints, an endpoint name is usually prefixed with the blueprint's name (e.g., <code>'admin.dashboard'</code>).</p>
+<p><code>url_for</code> can simplify this with relative endpoint names. If you're currently within a blueprint and want to link to another view <em>within the same blueprint</em>, you can prepend the endpoint name with a dot (<code>.</code>).</p>
+<pre><code class="language-python"># Assuming this is part of a blueprint called 'admin_bp'
+# For example, admin_bp.route(&quot;/dashboard&quot;) maps to admin_bp.dashboard
+# And admin_bp.route(&quot;/settings&quot;) maps to admin_bp.settings
+
+# In a view function *within* the 'admin_bp' blueprint:
+# url_for('.settings') # would generate /admin/settings (assuming admin_bp prefix is /admin)
+# url_for('admin_bp.dashboard') # would also work for the dashboard in the same blueprint
+</code></pre>
+<p>This keeps your blueprint code self-contained and flexible, as you don't need to hardcode the blueprint's full name everywhere.</p>
+<h3>The <code>AppContext</code> and <code>url_for</code></h3>
+<p>Like many core Flask features, <code>url_for</code> relies on an active application context (or request context, which includes it). As we learned in <a href="05_appcontext.html">Chapter 5: AppContext</a>, contexts provide the &quot;workbench&quot; where <code>current_app</code> and other proxy objects are available.</p>
+<p>When you call <code>url_for</code>, it internally accesses <code>current_app.url_for()</code> to perform the URL building. The <code>Flask</code> application instance holds the <code>url_map</code> (from Werkzeug's routing system) which contains all the registered URL rules. <code>url_for</code> uses this map to reverse-lookup the URL based on the endpoint name and provided values. If there's no active application context, Flask wouldn't know which application's <code>url_map</code> to use, leading to a <code>RuntimeError</code>.</p>
+<pre class="mermaid">sequenceDiagram
+    participant V as ViewFunction
+    participant F as FlaskApp
+    participant UA as URLAdapter
+
+    V->>F: Call url_for with endpoint name and params
+    F->>UA: Forward endpoint name and params
+    UA->>UA: Look up URL rule for endpoint
+    UA-->>F: Return constructed URL string
+    F-->>V: Return URL string
+</pre>
+<ol>
+<li>Your <strong>View Function</strong> calls <code>url_for()</code> with an endpoint name and any necessary parameters.</li>
+<li>The <strong>Flask App</strong> (our central manager) receives this call. Because <code>url_for</code> is a helper, it internally delegates to the <code>current_app</code>'s <code>url_for</code> method.</li>
+<li>The Flask App, using its <code>url_map</code> and a <strong>URL Adapter</strong> (Werkzeug's powerful routing engine), looks up the rule associated with the given endpoint.</li>
+<li>The URL Adapter uses the provided parameters to fill in any variable parts of the URL and adds extra parameters as a query string.</li>
+<li>The constructed URL string is returned to the Flask App.</li>
+<li>The Flask App passes the final URL string back to your View Function.</li>
+</ol>
+<p>By using <code>url_for</code>, you ensure your Flask application's navigation is robust, adaptable, and easy to maintain. It's an indispensable tool for building interconnected web experiences.</p>
+<p>Now that you can dynamically generate URLs, the next step is to display these links and other dynamic content to your users. This is where Flask's templating engine, powered by Jinja, comes in. In the next chapter, we'll learn how to integrate dynamic data and generated URLs into beautiful HTML using <code>render_template</code>.</p>
+<p>Go to <a href="07_render_template.html">render_template</a></p>
+
+  <nav class="chapter-nav">
+    <span><a href="05_appcontext.html">&larr; AppContext</a></span>
+    <span><a href="07_render_template.html">render_template &rarr;</a></span>
+  </nav>
+</body>
+</html>

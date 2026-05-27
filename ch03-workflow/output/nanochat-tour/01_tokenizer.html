@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tokenizer — nanochat</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; nanochat tour</a></p>
+<h1>Chapter 1: Tokenizer</h1>
+<p>Imagine you're trying to talk to a foreign friend who only understands a specific language, but you only know English. You need a translator, right? Similarly, Large Language Models (LLMs) like GPT don't "understand" human words directly. They operate on numbers. So, how does your English question "What is the capital of France?" become something a machine can process?</p>
+<p>The answer lies with the <strong>Tokenizer</strong>. This crucial component acts as the universal translator for your LLM. Its job is to convert your human-readable text into a sequence of numerical tokens that the GPT model can understand, and then convert those numerical tokens back into human text when the model wants to respond. Think of it like taking a complex LEGO creation (your sentence) and breaking it down into individual, numbered LEGO bricks (tokens). Each unique word, part of a word, or even punctuation mark gets its own number.</p>
+<h2>The Core Transformation: Text to Tokens and Back</h2>
+<p>At its heart, the tokenizer performs two main operations:</p>
+<ol>
+<li><strong>Encoding</strong>: Taking a string of text (e.g., "hello world") and breaking it down into smaller units, assigning a unique numerical ID to each unit.</li>
+<li><strong>Decoding</strong>: Taking a sequence of these numerical IDs and reassembling them into a coherent string of human-readable text.</li>
+</ol>
+<p>These units aren't always full words. Sometimes, a common word like "unbelievable" might be broken into "un", "believe", and "able" to save space in the vocabulary and allow the model to generalize better. This process is called Byte Pair Encoding (BPE), and it's what GPT models typically use.</p>
+<h2>Inside <code>nanochat</code>'s Tokenizer</h2>
+<p>The <code>nanochat</code> project leverages a robust tokenizer implementation, primarily found in <a href="nanochat/tokenizer.py"><code>nanochat/tokenizer.py</code></a>. It uses a combination of <code>rustbpe</code> for efficient vocabulary training and <code>tiktoken</code> (OpenAI's BPE library) for super-fast inference.</p>
+<p>Let's look at some key definitions and functions within this file.</p>
+<h3>Special Tokens</h3>
+<p>LLMs often need special markers to understand the structure of text, especially during conversational tasks or when interacting with tools. <code>nanochat</code> defines several such tokens:</p>
+<pre><code class="language-python"># nanochat/tokenizer.py
+SPECIAL_TOKENS = [
+    &quot;&lt;|bos|&gt;&quot;, # Beginning of Sequence (document delimiter)
+    &quot;&lt;|user_start|&gt;&quot;, &quot;&lt;|user_end|&gt;&quot;, # User messages
+    &quot;&lt;|assistant_start|&gt;&quot;, &quot;&lt;|assistant_end|&gt;&quot;, # Assistant messages
+    &quot;&lt;|python_start|&gt;&quot;, &quot;&lt;|python_end|&gt;&quot;, # Assistant invokes Python tool
+    &quot;&lt;|output_start|&gt;&quot;, &quot;&lt;|output_end|&gt;&quot;, # Python tool output
+]
+</code></pre>
+<p>These tokens are reserved during tokenization and assigned specific IDs. For instance, <code>&lt;|bos|&gt;</code> (Beginning of Sequence) is like a "start-of-new-document" signal to the model, ensuring it knows when a new piece of text begins. During fine-tuning for chat, <code>&lt;|user_start|&gt;</code> and <code>&lt;|assistant_start|&gt;</code> help the model understand who is speaking.</p>
+<h3>Splitting Text into Base Units</h3>
+<p>Before BPE can merge common sequences, the text first needs to be broken into initial "base units." This is done using a regular expression:</p>
+<pre><code class="language-python"># nanochat/tokenizer.py
+SPLIT_PATTERN = r&quot;&quot;&quot;'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}+|\p{N}{1,2}| ?[^\s\p{L}\p{N}]++[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+&quot;&quot;&quot;
+</code></pre>
+<p>This pattern smartly separates words, punctuation, and even handles contractions like "it's" or "I'll". Notice the <code>\p{N}{1,2}</code> part, which means it initially splits numbers into groups of one or two digits. This detail is often carefully tuned based on the target vocabulary size.</p>
+<h3>The <code>RustBPETokenizer</code> Class</h3>
+<p>This class is the workhorse of <code>nanochat</code>'s tokenization.</p>
+<h4>Learning a New Vocabulary (<code>train_from_iterator</code>)</h4>
+<p>You can train your own tokenizer to understand a specific dataset. This function takes an iterator of text (like a stream of sentences from a dataset) and learns the most common word-parts to create a vocabulary.</p>
+<pre><code class="language-python"># nanochat/tokenizer.py (simplified)
+class RustBPETokenizer:
+    @classmethod
+    def train_from_iterator(cls, text_iterator, vocab_size):
+        tokenizer = rustbpe.Tokenizer()
+        vocab_size_no_special = vocab_size - len(SPECIAL_TOKENS)
+        tokenizer.train_from_iterator(text_iterator, vocab_size_no_special, pattern=SPLIT_PATTERN)
+        # ... then convert to tiktoken encoding for fast inference
+        return cls(enc, &quot;&lt;|bos|&gt;&quot;)
+</code></pre>
+<p>This process happens in <a href="scripts/tok_train.py"><code>scripts/tok_train.py</code></a> during the pretraining stage. The tokenizer learns a <code>vocab_size</code> (e.g., 32,768) distinct numerical IDs to represent all the text it sees.</p>
+<h4>Loading a Pre-trained Tokenizer (<code>from_directory</code>)</h4>
+<p>Once trained, the tokenizer (its <code>tiktoken</code> encoding object) is saved to disk. When you run <code>nanochat</code>, it usually loads an existing tokenizer from <code>~/.cache/nanochat/tokenizer</code>.</p>
+<pre><code class="language-python"># nanochat/tokenizer.py (simplified)
+    @classmethod
+    def from_directory(cls, tokenizer_dir):
+        pickle_path = os.path.join(tokenizer_dir, &quot;tokenizer.pkl&quot;)
+        with open(pickle_path, &quot;rb&quot;) as f:
+            enc = pickle.load(f)
+        return cls(enc, &quot;&lt;|bos|&gt;&quot;)
+</code></pre>
+<h4>Encoding and Decoding Text</h4>
+<p>These are the fundamental methods for translation:</p>
+<pre><code class="language-python"># nanochat/tokenizer.py (simplified)
+    def encode(self, text, prepend=None, append=None, num_threads=8):
+        # Converts text (string or list of strings) into a list of token IDs.
+        # 'prepend' or 'append' can add special tokens like '&lt;|bos|&gt;'
+        # For example: tokenizer.encode(&quot;Hello world&quot;, prepend=&quot;&lt;|bos|&gt;&quot;)
+        pass # implementation details omitted for brevity
+
+    def decode(self, ids):
+        # Converts a list of token IDs back into a single string.
+        # For example: tokenizer.decode([1, 2, 3]) -&gt; &quot;hello world&quot;
+        return self.enc.decode(ids)
+</code></pre>
+<h4>Structuring Conversations (<code>render_conversation</code>)</h4>
+<p>This function is critical for preparing chat data for <strong>Supervised Fine-Tuning (SFT)</strong>. It takes a conversation (a list of messages with roles like "user" and "assistant") and converts it into a single sequence of token IDs.</p>
+<p>Crucially, it also produces a <code>mask</code>. This mask tells the model which tokens it <em>should</em> try to predict (usually the assistant's responses) and which tokens it <em>should not</em> (like the user's prompts or special formatting tokens).</p>
+<pre><code class="language-python"># nanochat/tokenizer.py (simplified)
+    def render_conversation(self, conversation, max_tokens=2048):
+        ids, mask = [], []
+        # ... logic to add special tokens for user/assistant roles,
+        #     encode message content, and set mask to 0 or 1.
+        # For example:
+        # add_tokens(user_start, 0) # User start token, mask = 0 (not for training)
+        # add_tokens(self.encode(user_message), 0) # User message, mask = 0
+        # add_tokens(user_end, 0) # User end token, mask = 0
+        # add_tokens(assistant_start, 0) # Assistant start token, mask = 0
+        # add_tokens(self.encode(assistant_response), 1) # Assistant response, mask = 1 (TRAIN HERE!)
+        # add_tokens(assistant_end, 1) # Assistant end token, mask = 1
+        # ...
+        return ids, mask
+</code></pre>
+<p>Here's a small example of what <code>render_conversation</code> might produce for a simple chat:</p>
+<pre><code class="language-text"># Input conversation
+conversation = {
+    &quot;messages&quot;: [
+        {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Tell me a story.&quot;},
+        {&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: &quot;Once upon a time...&quot;}
+    ]
+}
+
+# Example output (simplified token IDs and mask)
+ids = [
+    1, # &lt;|bos|&gt;
+    2, # &lt;|user_start|&gt;
+    100, 101, 102, # &quot;Tell me a story.&quot;
+    3, # &lt;|user_end|&gt;
+    4, # &lt;|assistant_start|&gt;
+    200, 201, 202, 203, # &quot;Once upon a time...&quot;
+    5, # &lt;|assistant_end|&gt;
+]
+mask = [
+    0, # &lt;|bos|&gt;
+    0, # &lt;|user_start|&gt;
+    0, 0, 0, # &quot;Tell me a story.&quot;
+    0, # &lt;|user_end|&gt;
+    0, # &lt;|assistant_start|&gt;
+    1, 1, 1, 1, # &quot;Once upon a time...&quot; (these are the tokens the model learns to predict)
+    1, # &lt;|assistant_end|&gt;
+]
+</code></pre>
+<p>The <code>visualize_tokenization</code> helper method in <code>nanochat/tokenizer.py</code> is very useful for inspecting this output.</p>
+<h4>Priming for Completion (<code>render_for_completion</code>)</h4>
+<p>For tasks like <strong>Reinforcement Learning (RL)</strong> or pure inference, you want the model to generate a response <em>from scratch</em>. This function takes a conversation, removes the last assistant message (the one the model is supposed to generate), and then appends an <code>&lt;|assistant_start|&gt;</code> token to prompt the model to begin generating its own assistant response.</p>
+<pre><code class="language-python"># nanochat/tokenizer.py (simplified)
+    def render_for_completion(self, conversation):
+        # ... removes last assistant message ...
+        ids, mask = self.render_conversation(conversation)
+        assistant_start = self.encode_special(&quot;&lt;|assistant_start|&gt;&quot;)
+        ids.append(assistant_start)
+        return ids # no mask needed for inference/RL, only the input sequence
+</code></pre>
+<h3>Tokenizer in Action</h3>
+<p>Here's how text flows through the tokenizer and into the GPT model:</p>
+<pre class="mermaid">sequenceDiagram
+    participant U as User
+    participant T as Tokenizer
+    participant G as GPT (LLM)
+
+    U->>T: 'Your question in text'
+    T->>T: 'Break into sub-word units<br/>and assign numerical IDs'
+    T->>T: 'Add special markers like<br/>User start marker and Assistant start marker'
+    T-->>G: 'send token IDs (e.g., [1, 513, 204, 2])<br/>and mask (e.g., [0, 0, 1, 1])'
+    G->>G: 'Process numerical tokens<br/>and generate next token ID'
+    G->>T: 'request token ID to text conversion'
+    T-->>G: 'return decoded token (e.g., "the")'
+    G->>U: 'display generated text'
+</pre>
+<h2>Where the Tokenizer is Used</h2>
+<p>The tokenizer is a foundational component, used across almost every stage of the LLM lifecycle in <code>nanochat</code>:</p>
+<ul>
+<li><strong>Pretraining</strong>: To convert raw text from the pretraining dataset (<a href="04_dataloader.html">DataLoader</a>) into tokens for the base model (<a href="03_gpt.html">GPT</a>). This happens in <a href="scripts/base_train.py"><code>scripts/base_train.py</code></a>.</li>
+<li><strong>Supervised Fine-tuning (SFT)</strong>: To prepare structured conversational data for training chat models (<a href="08_task.html">Task</a>). This is handled by <a href="scripts/chat_sft.py"><code>scripts/chat_sft.py</code></a>.</li>
+<li><strong>Reinforcement Learning (RL)</strong>: To encode prompts and decode generated responses, especially when models use external tools. This is seen in <a href="scripts/chat_rl.py"><code>scripts/chat_rl.py</code></a>.</li>
+<li><strong>Inference</strong>: For real-time chat interactions, quickly encoding user input and decoding the model's output in the <a href="09_engine.html">Engine</a>, used by applications like <a href="scripts/chat_web.py"><code>scripts/chat_web.py</code></a>.</li>
+</ul>
+<p>Now that you understand how human language is transformed into numerical tokens for the LLM, you might wonder how the LLM itself is structured and configured. What defines its "brain" and capabilities? That's precisely what we'll explore in the next chapter: <a href="02_gptconfig.html">GPTConfig</a>.</p>
+  <nav class="chapter-nav">
+    <span>&nbsp;</span>
+    <span><a href="02_gptconfig.html">GPTConfig &rarr;</a></span>
+  </nav>
+</body>
+</html>

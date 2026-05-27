@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Route — express</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; express tour</a></p>
+<h1>Chapter 6: Route</h1>
+<p>In <a href="05_router.html">Chapter 5: Router</a>, we learned how to organize our web application by creating specialized <code>Router</code> instances. This allowed us to group related routes (like all <code>/users</code> related paths) into their own modular files, making our codebase cleaner and more manageable. But what if you have multiple HTTP methods (like GET, POST, PUT, DELETE) that all apply to the <em>exact same</em> URL path?</p>
+<p>Imagine you're managing a single, specific item in your inventory system. You want to:</p>
+<ul>
+<li><code>GET</code> the details of that item.</li>
+<li><code>PUT</code> new information to update that item.</li>
+<li><code>DELETE</code> that item entirely.</li>
+<li>Perhaps <code>POST</code> an action specific to that item, like adding a review.</li>
+</ul>
+<p>If you were to define these using <code>app.get()</code>, <code>app.put()</code>, <code>app.delete()</code>, etc., you'd end up repeating the same path (<code>/api/items/:id</code>) for each method. This can feel repetitive and make it harder to see all operations related to that single resource at a glance.</p>
+<p>This is where the Express <code>Route</code> comes into play. If our <code>Router</code> is like a specialized departmental sorting office, then a <code>Route</code> is a <strong>specific counter at that office, designated for all operations related to a single type of request item</strong>. It's like a dedicated &quot;Order Modification Desk&quot; where you can bring an order to <em>look it up</em> (GET), <em>change its details</em> (PUT), or <em>cancel it</em> (DELETE). All these actions for that one order happen at that single, well-defined counter.</p>
+<h3>Creating a Dedicated Counter: <code>app.route(path)</code> and <code>router.route(path)</code></h3>
+<p>Express provides the <code>app.route(path)</code> method (and <code>router.route(path)</code> if you're using a <code>Router</code> instance) to create a <code>Route</code> instance. This instance then allows you to chain HTTP method handlers (<code>.get()</code>, <code>.post()</code>, <code>.put()</code>, <code>.delete()</code>, etc.) and middleware for that <em>specific, single path</em>.</p>
+<p>Let's look at an example for handling <code>GET</code> and <code>POST</code> requests to a <code>/products</code> endpoint:</p>
+<pre><code class="language-javascript">const express = require('express');
+const app = express();
+
+// Middleware to parse JSON bodies, as discussed in Chapter 4: Middleware
+app.use(express.json());
+
+// Create a Route instance for the /products path
+app.route('/products')
+  .get((req, res) =&gt; {
+    // Handler for GET /products
+    res.send('Display a list of all products');
+  })
+  .post((req, res) =&gt; {
+    // Handler for POST /products
+    console.log('Received new product:', req.body);
+    res.status(201).send(`Product &quot;${req.body.name}&quot; created.`);
+  });
+
+app.listen(3000, () =&gt; {
+  console.log('Server running on port 3000');
+});
+</code></pre>
+<p>In this example, <code>app.route('/products')</code> creates a <code>Route</code> object. We then chain <code>.get()</code> and <code>.post()</code> methods directly onto this <code>Route</code> object. This clearly groups all the logic for the <code>/products</code> path together. It's concise and easy to read.</p>
+<p>To test this:</p>
+<ul>
+<li>Visit <code>http://localhost:3000/products</code> in your browser (sends a GET request).</li>
+<li>Use a tool like <code>curl</code> or Postman for the POST request:<pre><code class="language-bash">curl -X POST -H &quot;Content-Type: application/json&quot; \
+     -d '{&quot;name&quot;: &quot;Laptop&quot;, &quot;price&quot;: 1200}' \
+     http://localhost:3000/products
+</code></pre>
+</li>
+</ul>
+<h3>Combining <code>Router</code> with <code>Route</code> for Finer Granularity</h3>
+<p>The true power of <code>Route</code> often shines when combined with <code>Router</code> instances. You can define specific &quot;item&quot; routes within your feature-specific routers.</p>
+<p>Let's extend our <code>usersRoutes</code> from <a href="05_router.html">Chapter 5: Router</a> to handle specific user operations:</p>
+<p><strong>1. Create <code>routes/users.js</code>:</strong></p>
+<pre><code class="language-javascript">// routes/users.js
+const express = require('express');
+const router = express.Router(); // Our specialized sorting office
+
+// A simple middleware for this router (runs for all /users paths)
+router.use((req, res, next) =&gt; {
+  console.log(`User-related request at: ${req.baseUrl}`); // From Chapter 5: Router
+  next();
+});
+
+// Route for /users (list all users, create new user)
+router.route('/')
+  .get((req, res) =&gt; {
+    res.send('Fetching all users...');
+  })
+  .post((req, res) =&gt; {
+    // This assumes body parsing middleware is set up on the main app
+    res.status(201).send(`Creating new user: ${req.body ? req.body.name : 'unknown'}`);
+  });
+
+// Route for /users/:userId (get, update, delete a specific user)
+router.route('/:userId')
+  .get((req, res) =&gt; {
+    // req.params.userId is available from Chapter 2: req
+    res.send(`Getting details for user ID: ${req.params.userId}`);
+  })
+  .put((req, res) =&gt; {
+    res.send(`Updating user ID: ${req.params.userId} with data: ${req.body ? JSON.stringify(req.body) : 'none'}`);
+  })
+  .delete((req, res) =&gt; {
+    res.send(`Deleting user ID: ${req.params.userId}`);
+  });
+
+module.exports = router; // Export the router
+</code></pre>
+<p><strong>2. Integrate into Your Main Application (<code>app.js</code>):</strong></p>
+<pre><code class="language-javascript">// app.js
+const express = require('express');
+const app = express();
+const usersRoutes = require('./routes/users'); // Import our user router
+
+// Middleware to parse JSON bodies globally
+app.use(express.json());
+
+// Mount the user router at the /users base path
+app.use('/users', usersRoutes);
+
+app.get('/', (req, res) =&gt; {
+  res.send('Welcome to the homepage!');
+});
+
+app.listen(3000, () =&gt; console.log('Server running on port 3000'));
+</code></pre>
+<p>Now, when you interact with URLs like <code>http://localhost:3000/users/42</code>, all the specific actions (GET, PUT, DELETE) for user <code>42</code> are handled by the <code>router.route('/:userId')</code> definition in <code>routes/users.js</code>. This makes the code for handling user resources incredibly clean and organized.</p>
+<h3>Route-Specific Middleware: Even More Control</h3>
+<p>Just like <code>app.use()</code> and <code>router.use()</code> can apply middleware to the entire application or a router, a <code>Route</code> instance can also have its own, even more granular, middleware stack. This is like having a specific checkpoint <em>only</em> for items passing through our &quot;Order Modification Desk.&quot;</p>
+<p>You can apply middleware to a <code>Route</code> using <code>route.all()</code> or by simply adding the middleware function before the final handler:</p>
+<pre><code class="language-javascript">// routes/users.js (modifying the existing user ID route)
+router.route('/:userId')
+  // Middleware specific to this :userId route, applied to all methods
+  .all((req, res, next) =&gt; {
+    const userId = parseInt(req.params.userId, 10);
+    if (isNaN(userId)) {
+      // If ID is not a number, terminate the request here
+      return res.status(400).send('Invalid User ID provided. Must be a number.');
+    }
+    // Attach the parsed ID to the request object for later use
+    req.parsedUserId = userId;
+    console.log(`Validated User ID: ${req.parsedUserId}`);
+    next(); // Pass control to the next handler/middleware in this route
+  })
+  .get((req, res) =&gt; {
+    // req.parsedUserId is now guaranteed to be a valid number
+    res.send(`Getting details for user ID: ${req.parsedUserId}`);
+  })
+  .put((req, res) =&gt; {
+    res.send(`Updating user ID: ${req.parsedUserId} with data: ${req.body ? JSON.stringify(req.body) : 'none'}`);
+  })
+  .delete((req, res) =&gt; {
+    res.send(`Deleting user ID: ${req.parsedUserId}`);
+  });
+</code></pre>
+<p>In this updated example, the <code>.all()</code> middleware will run for <em>any</em> HTTP method (GET, PUT, DELETE, etc.) that targets the <code>/:userId</code> path. It performs validation on the <code>userId</code> parameter and either sends an error response or passes control to the next function. This ensures that any handler for <code>/users/:userId</code> will always receive a validated <code>userId</code>. This builds on the concepts of <a href="04_middleware.html">Middleware</a> by applying it at the most specific level possible.</p>
+<h3>How Requests Flow with Route Instances</h3>
+<p>Let's visualize how a request makes its way through your application when <code>Route</code> instances are involved:</p>
+<pre class="mermaid">sequenceDiagram
+    participant User as User's Browser
+    participant ExpressApp as Express App
+    participant UsersRouter as Users Router
+    participant UserIdRoute as User ID Route Instance
+    participant Handler as Specific Handler
+
+    User->>ExpressApp: 'GET /users/123'
+    ExpressApp->>ExpressApp: Global Middleware (e.g., body parser)
+    ExpressApp->>UsersRouter: Delegates /users path
+    UsersRouter->>UsersRouter: Router-specific Middleware
+    UsersRouter->>UserIdRoute: Matches /:userId route
+    UserIdRoute->>UserIdRoute: Route-specific Middleware (e.g., ID validator)
+    UserIdRoute->>Handler: Invokes GET handler
+    Handler->>ExpressApp: Sends Response (res.send)
+    ExpressApp->>User: HTTP Response
+</pre>
+<p>As you can see, the <code>Route</code> instance is the final, most specific dispatch point before your actual endpoint handler. It has its own dedicated pipeline for processing requests that target its specific path and HTTP method combination.</p>
+<h3>Conclusion</h3>
+<p>The Express <code>Route</code> provides an elegant and powerful way to handle multiple HTTP methods for a single path. By chaining method handlers and applying route-specific middleware, you can keep your code highly organized, readable, and maintainable, especially when dealing with RESTful API design. It represents the ultimate level of specificity in Express's routing system, ensuring that each &quot;customer service counter&quot; is perfectly equipped to handle its designated &quot;request items.&quot;</p>
+<p>Now that you've mastered how to organize your application's logic from the main <code>app</code> to modular <code>Router</code> instances and specific <code>Route</code> definitions, there's one more crucial piece to building full-stack web applications: how do you dynamically generate and serve HTML pages to your users? That's what we'll explore in the final chapter, <a href="07_view.html">View</a>, where we'll dive into templating engines and rendering dynamic content.</p>
+
+  <nav class="chapter-nav">
+    <span><a href="05_router.html">&larr; Router</a></span>
+    <span><a href="07_view.html">View &rarr;</a></span>
+  </nav>
+</body>
+</html>

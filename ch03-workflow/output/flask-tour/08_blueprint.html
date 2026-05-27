@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blueprint — flask</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; flask tour</a></p>
+<h1>Chapter 8: Blueprint</h1>
+<p>Imagine your restaurant from <a href="01_flask.html">Chapter 1: Flask</a> has become incredibly popular. You started with a simple menu and one chef, but now you have a huge kitchen, multiple specialized chefs, and a sprawling menu with sections like &quot;Italian Classics,&quot; &quot;Asian Fusion,&quot; and &quot;Desserts.&quot; If your single restaurant manager tried to oversee every single dish, every ingredient order, and every staff member directly, chaos would quickly ensue. The whole operation would grind to a halt.</p>
+<p>Similarly, as your Flask application grows, adding dozens or hundreds of routes, templates, and static files directly to your main <code>app.py</code> file can lead to a messy, unmaintainable codebase. Finding the code for a specific feature, managing overlapping URL paths, or trying to reuse a set of related functionalities in another project would become a nightmare.</p>
+<p>This is the problem that Flask's <strong>Blueprint</strong> solves. A Blueprint is like creating a specialized department within your application, complete with its own manager, menu, and internal logic. For example, you might have a &quot;User Accounts Department&quot; that handles everything related to user registration, login, profile management, and password resets. Or a &quot;Blog Department&quot; that manages post creation, display, and comments.</p>
+<p>These departments (Blueprints) are self-contained, modular sections of your application that can define their own:</p>
+<ul>
+<li><strong>Routes:</strong> URL rules and their associated view functions.</li>
+<li><strong>Templates:</strong> HTML files to render using <code>render_template</code> (<a href="07_render_template.html">Chapter 7: render_template</a>).</li>
+<li><strong>Static Files:</strong> CSS, JavaScript, images, etc.</li>
+<li><strong>Error Handlers:</strong> How to respond to errors specific to that department.</li>
+<li><strong>Before/After Request Functions:</strong> Logic that runs before or after requests handled by this department.</li>
+</ul>
+<p>Once defined, these Blueprints can be registered (or &quot;plugged in&quot;) to your main Flask application or even to other Blueprints. This keeps your code organized, maintainable, and even reusable across different Flask projects.</p>
+<p>Let's start by creating a simple &quot;authentication&quot; Blueprint.</p>
+<h3>Creating Your First Blueprint</h3>
+<p>Traditionally, you define blueprints in separate Python files. Let's create a new folder called <code>auth</code> and inside it, an <code>__init__.py</code> file (to make it a Python package) and a <code>views.py</code> file.</p>
+<p><strong>File: <code>auth/views.py</code></strong></p>
+<pre><code class="language-python">from flask import Blueprint, render_template, redirect, url_for
+
+# Create a Blueprint instance
+# 'auth' is the blueprint's name (used for routing, e.g., 'auth.login')
+# __name__ is the import name for the blueprint
+auth_bp = Blueprint('auth', __name__, template_folder='templates', static_folder='static')
+
+@auth_bp.route('/login')
+def login():
+    return render_template('auth/login.html')
+
+@auth_bp.route('/logout')
+def logout():
+    # In a real app, this would log the user out
+    return &quot;You have been logged out.&quot;
+
+@auth_bp.route('/register')
+def register():
+    # Redirect to login page after successful registration (for example)
+    return redirect(url_for('auth.login'))
+</code></pre>
+<p>In this <code>views.py</code> file:</p>
+<ul>
+<li>We import <code>Blueprint</code> and other necessary Flask functions.</li>
+<li><code>auth_bp = Blueprint('auth', __name__, ...)</code> creates our Blueprint.
+<ul>
+<li><code>'auth'</code> is the name of our blueprint. This name is crucial because it's used to identify this blueprint when referencing its routes (e.g., <code>'auth.login'</code>) or static files.</li>
+<li><code>__name__</code> helps Flask locate the blueprint's resources (like templates and static files) relative to this module.</li>
+<li><code>template_folder='templates'</code> and <code>static_folder='static'</code> tell Flask to look for templates and static files inside <code>auth/templates</code> and <code>auth/static</code> respectively.</li>
+</ul>
+</li>
+<li>We define routes using <code>@auth_bp.route()</code> instead of <code>@app.route()</code>. These routes are now &quot;owned&quot; by the <code>auth_bp</code> blueprint.</li>
+<li>Notice <code>url_for('auth.login')</code>. Because <code>login</code> is a route within the <code>auth</code> blueprint, we preface its endpoint name with the blueprint's name, separated by a dot. This ensures <code>url_for</code> (<a href="06_url_for.html">Chapter 6: url_for</a>) correctly generates the URL, even if multiple blueprints have a <code>login</code> view function.</li>
+</ul>
+<p>Now, let's create a template for our login page:</p>
+<p><strong>File: <code>auth/templates/auth/login.html</code></strong></p>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+    &lt;meta charset=&quot;UTF-8&quot;&gt;
+    &lt;title&gt;Login&lt;/title&gt;
+    &lt;link rel=&quot;stylesheet&quot; href=&quot;{{ url_for('auth.static', filename='css/style.css') }}&quot;&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;h1&gt;Login to Your Account&lt;/h1&gt;
+    &lt;form action=&quot;#&quot; method=&quot;post&quot;&gt;
+        &lt;label for=&quot;username&quot;&gt;Username:&lt;/label&gt;
+        &lt;input type=&quot;text&quot; id=&quot;username&quot; name=&quot;username&quot;&gt;&lt;br&gt;&lt;br&gt;
+        &lt;label for=&quot;password&quot;&gt;Password:&lt;/label&gt;
+        &lt;input type=&quot;password&quot; id=&quot;password&quot; name=&quot;password&quot;&gt;&lt;br&gt;&lt;br&gt;
+        &lt;input type=&quot;submit&quot; value=&quot;Login&quot;&gt;
+    &lt;/form&gt;
+    &lt;p&gt;Don't have an account? &lt;a href=&quot;{{ url_for('auth.register') }}&quot;&gt;Register here&lt;/a&gt;&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>Here:</p>
+<ul>
+<li>We link a static file using <code>url_for('auth.static', filename='css/style.css')</code>. This tells Flask to look for <code>style.css</code> in the <code>static</code> folder associated with the <code>auth</code> blueprint.</li>
+<li>We link to another blueprint route using <code>url_for('auth.register')</code>.</li>
+</ul>
+<p>Let's also add a static CSS file:</p>
+<p><strong>File: <code>auth/static/css/style.css</code></strong></p>
+<pre><code class="language-css">body {
+    font-family: sans-serif;
+    background-color: #f4f4f4;
+    text-align: center;
+    padding-top: 50px;
+}
+h1 {
+    color: #333;
+}
+form {
+    background: white;
+    margin: 20px auto;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    width: 300px;
+}
+</code></pre>
+<h3>Registering the Blueprint</h3>
+<p>To make our <code>auth</code> Blueprint active, we need to register it with our main Flask application.</p>
+<p><strong>File: <code>app.py</code></strong></p>
+<pre><code class="language-python">from flask import Flask, render_template
+from auth.views import auth_bp # Import our blueprint
+
+app = Flask(__name__)
+
+# Register the blueprint
+# All routes defined in auth_bp will now be available under the /auth prefix
+app.register_blueprint(auth_bp, url_prefix='/auth')
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+if __name__ == '__main__':
+    app.run(debug=True)
+</code></pre>
+<p>And a simple <code>index.html</code>:</p>
+<p><strong>File: <code>templates/index.html</code></strong></p>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+    &lt;meta charset=&quot;UTF-8&quot;&gt;
+    &lt;title&gt;Main App&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;h1&gt;Welcome to the Main Application!&lt;/h1&gt;
+    &lt;p&gt;Go to the &lt;a href=&quot;{{ url_for('auth.login') }}&quot;&gt;Login Page&lt;/a&gt;&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>Now, when you run <code>app.py</code> and navigate to:</p>
+<ul>
+<li><code>http://127.0.0.1:5000/</code>: You'll see the main app's index page.</li>
+<li><code>http://127.0.0.1:5000/auth/login</code>: You'll see the login page rendered from <code>auth/templates/auth/login.html</code>, with the stylesheet loaded from <code>auth/static/css/style.css</code>.</li>
+<li><code>http://127.0.0.1:5000/auth/register</code>: You'll be redirected to <code>/auth/login</code>.</li>
+</ul>
+<p>The <code>url_prefix='/auth'</code> argument in <code>app.register_blueprint()</code> means that all routes defined in <code>auth_bp</code> will automatically be prefixed with <code>/auth</code>. So, <code>@auth_bp.route('/login')</code> effectively becomes <code>/auth/login</code>. This is immensely helpful for avoiding URL conflicts and maintaining clear separation.</p>
+<h3>How Blueprint Registration Works</h3>
+<p>You might wonder how all these routes and configurations get transferred from the Blueprint to the main Flask <code>app</code> object. When you call <code>app.register_blueprint(auth_bp, ...)</code>, Flask internally performs a series of steps:</p>
+<ol>
+<li>It creates a <code>BlueprintSetupState</code> object (<code>src/flask/sansio/blueprints.py</code> shows its initialization). This object holds all the options you passed during registration (like <code>url_prefix</code>, <code>template_folder</code>, etc.) and a reference to the main <code>app</code>.</li>
+<li>The Blueprint then iterates through its list of <code>deferred_functions</code> (<code>src/flask/sansio/blueprints.py</code>). These are functions that were &quot;recorded&quot; when you used decorators like <code>@auth_bp.route()</code> or <code>@auth_bp.before_request()</code>.</li>
+<li>Each <code>deferred_function</code> is called with the <code>BlueprintSetupState</code> object. For a route, this function will call <code>state.add_url_rule()</code>, which in turn calls <code>app.add_url_rule()</code> on the main Flask application, effectively transferring the route.</li>
+</ol>
+<p>This deferred setup is crucial. It means a Blueprint doesn't need to know anything about the <code>Flask</code> application when it's defined. It just records its intentions, and those intentions are executed once it's explicitly registered with a real application.</p>
+<h3>Blueprints and Contexts</h3>
+<p>Like most Flask components, Blueprints work within the <code>AppContext</code> (<a href="05_appcontext.html">Chapter 5: AppContext</a>). When a request comes in and is routed to a Blueprint's view function, an <code>AppContext</code> is pushed, and the <code>request</code> object (<a href="03_request.html">Chapter 3: Request</a>) will contain information about the active blueprint (<code>request.blueprint</code>). This allows internal functions like <code>url_for</code> or <code>render_template</code> to correctly resolve blueprint-specific resources.</p>
+<p>For instance, Flask's templating system (powered by Jinja2) uses a <code>DispatchingJinjaLoader</code> (<code>src/flask/templating.py</code>) that checks both the main application's template folder and any registered blueprints' template folders when <code>render_template</code> (<a href="07_render_template.html">Chapter 7: render_template</a>) is called. This is how <code>auth/templates/auth/login.html</code> is found.</p>
+<pre class="mermaid">sequenceDiagram
+    participant App as Flask Application
+    participant BP as Auth Blueprint
+    participant U as User
+    participant Browser as Web Browser
+    participant ReqCtx as Request Context
+
+    App->BP: Registers Blueprint with URL prefix
+    BP->>BP: Records routes, templates, static files
+    U->Browser: Requests /auth/login
+    Browser->App: Sends HTTP request
+    App->ReqCtx: Pushes Request Context
+    ReqCtx->App: Matches /auth/login to Blueprint's rule
+    App->BP: Calls Auth Blueprint's login view function
+    BP->ReqCtx: Accesses request.blueprint and url_for, render_template
+    ReqCtx->BP: Provides context-specific data
+    BP-->App: Returns rendered HTML with CSS link
+    App->Browser: Sends HTTP response
+    Browser->U: Displays login page
+</pre>
+<p>The Flask application acts as the central orchestrator. Once the <code>auth</code> Blueprint is registered, Flask routes incoming requests to the correct view function, which then leverages the <code>Request Context</code> to access blueprint-specific details like the <code>request.blueprint</code> name or to generate URLs and render templates using the blueprint's defined resources.</p>
+<h3>Conclusion</h3>
+<p>Blueprints are an indispensable tool for building well-structured, scalable, and maintainable Flask applications. They allow you to:</p>
+<ul>
+<li><strong>Modularize</strong> your application into distinct, focused features.</li>
+<li><strong>Organize</strong> routes, templates, and static assets in a clear, hierarchical manner.</li>
+<li><strong>Reuse</strong> components across different projects.</li>
+</ul>
+<p>By providing a clean way to compartmentalize your code, Blueprints empower you to grow your Flask application from a small script to a complex web service without getting tangled in its own logic.</p>
+<p>This chapter on Blueprints concludes our journey through the core concepts of Flask. We started with the central <code>Flask</code> application object (<a href="01_flask.html">Chapter 1: Flask</a>), learned how to configure it (<a href="02_config.html">Chapter 2: Config</a>), and understood the lifecycle of an incoming <code>Request</code> (<a href="03_request.html">Chapter 3: Request</a>) and an outgoing <code>Response</code> (<a href="04_response.html">Chapter 4: Response</a>). We explored the magical <code>AppContext</code> that ties everything together (<a href="05_appcontext.html">Chapter 5: AppContext</a>), discovered how to navigate our application with <code>url_for</code> (<a href="06_url_for.html">Chapter 6: url_for</a>), and brought our web pages to life with <code>render_template</code> (<a href="07_render_template.html">Chapter 7: render_template</a>). Finally, with Blueprints, you now know how to structure these components into a robust and scalable application.</p>
+<p>These eight chapters have laid a solid foundation for your Flask development journey. From here, you can dive deeper into Flask's advanced features, explore extensions, and confidently build powerful web applications. Happy coding!</p>
+
+  <nav class="chapter-nav">
+    <span><a href="07_render_template.html">&larr; render_template</a></span>
+    <span>&nbsp;</span>
+  </nav>
+</body>
+</html>

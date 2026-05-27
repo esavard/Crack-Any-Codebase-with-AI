@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Neuron — micrograd</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; micrograd tour</a></p>
+<h1>Chapter 4: Neuron</h1>
+<h2>The Problem: Making a Basic Decision from Multiple Signals</h2>
+<p>Imagine you're trying to decide whether to grab your umbrella. You don't just look at one thing; you consider several pieces of information: &quot;Is it cloudy?&quot; (yes/no), &quot;Is the forecast sunny?&quot; (yes/no), &quot;Did I hear thunder?&quot; (yes/no). Each piece of information has a different level of importance to your decision. Hearing thunder might be very important, while a distant cloud might be less so.</p>
+<p>How can we build a computational unit that mimics this kind of decision-making process? It needs to take multiple inputs, assign different levels of importance (or &quot;weight&quot;) to each, combine them, and then make a simple &quot;yes&quot; or &quot;no&quot; (or &quot;strong yes&quot; / &quot;weak yes&quot;) output. This is the fundamental task of a <strong>neuron</strong> in a neural network.</p>
+<h2>Introducing the <code>Neuron</code>: A Simple Decision-Maker</h2>
+<p>In <code>micrograd</code>, a <code>Neuron</code> is the smallest processing unit that can take multiple inputs and produce a single output. It's built upon the <code>Value</code> objects we explored in <a href="01_value.html">Chapter 1: Value</a> and adheres to the management principles of the <code>Module</code> class from <a href="03_module.html">Chapter 3: Module</a>.</p>
+<p>Think of a <code>Neuron</code> as a tiny, specialized calculator. It performs three key steps:</p>
+<ol>
+<li><strong>Weighted Sum:</strong> It takes multiple numerical inputs. Each input is multiplied by its own &quot;secret number&quot; (called a <strong>weight</strong>), reflecting its importance.</li>
+<li><strong>Bias Adjustment:</strong> All these weighted inputs are then added together, and one final &quot;secret number&quot; (called a <strong>bias</strong>) is added to the sum. This bias essentially sets a baseline or threshold for the neuron's activation.</li>
+<li><strong>Activation:</strong> The final sum is then passed through an <strong>activation function</strong>. This function decides whether the neuron &quot;fires&quot; or not, or what strength its output should be. A common choice is ReLU, which outputs the sum if it's positive, and zero otherwise.</li>
+</ol>
+<p>These &quot;secret numbers&quot; (weights and biases) are the learnable parameters of the neuron. During training, <code>micrograd</code> will adjust these <code>Value</code> objects to make the neuron's output more accurate.</p>
+<h2>Building a <code>Neuron</code>: Weights, Bias, and Non-linearity</h2>
+<p>Let's look at the <code>Neuron</code> class in <code>micrograd</code>, specifically its initialization and how it processes inputs.</p>
+<pre><code class="language-python"># From micrograd/nn.py
+import random
+from micrograd.engine import Value
+from micrograd.nn import Module # We inherit from Module!
+
+class Neuron(Module): # Neuron is a Module
+
+    def __init__(self, nin, nonlin=True):
+        # 1. Initialize weights: one for each input
+        self.w = [Value(random.uniform(-1,1)) for _ in range(nin)]
+        # 2. Initialize bias: a single Value
+        self.b = Value(0)
+        # 3. Store whether to use a non-linear activation (like ReLU)
+        self.nonlin = nonlin
+</code></pre>
+<h3><code>__init__</code>: Setting Up the Neuron's Brain</h3>
+<p>When you create a <code>Neuron</code> (e.g., <code>Neuron(2)</code> for two inputs), the <code>__init__</code> method does the following:</p>
+<ol>
+<li><strong><code>self.w</code> (Weights):</strong> It creates a list of <code>nin</code> (number of inputs) <code>Value</code> objects. Each <code>Value</code> is initialized with a small random number between -1 and 1. These are the &quot;importance scores&quot; for each input, and they are learnable.</li>
+<li><strong><code>self.b</code> (Bias):</strong> It creates a single <code>Value</code> object, initialized to <code>0</code>. This is the &quot;baseline adjustment,&quot; also learnable.</li>
+<li><strong><code>self.nonlin</code> (Non-linearity Flag):</strong> A boolean flag, <code>True</code> by default, indicating whether the neuron should apply a non-linear activation function (like ReLU) at the end of its calculation.</li>
+</ol>
+<p>All <code>self.w</code> and <code>self.b</code> are <code>Value</code> objects, which means <code>micrograd</code> will automatically track their operations and calculate their gradients when <code>backward()</code> is called.</p>
+<h3><code>__call__</code>: The Neuron's Calculation</h3>
+<p>The <code>__call__</code> method defines what happens when you &quot;run&quot; the neuron, passing it a list of inputs <code>x</code>.</p>
+<pre><code class="language-python"># From micrograd/nn.py (inside Neuron class)
+
+    def __call__(self, x):
+        # Calculate the weighted sum + bias
+        # For each weight wi and input xi, multiply them: wi*xi
+        # Then sum all these products and add the bias b
+        act = sum((wi*xi for wi,xi in zip(self.w, x)), self.b)
+
+        # Optionally apply the non-linear activation function (ReLU)
+        return act.relu() if self.nonlin else act
+</code></pre>
+<p>Let's break down this crucial part:</p>
+<ol>
+<li><strong><code>zip(self.w, x)</code>:</strong> This pairs each weight (<code>wi</code>) with its corresponding input (<code>xi</code>). For example, if <code>self.w = [w0, w1]</code> and <code>x = [x0, x1]</code>, this creates pairs <code>(w0, x0)</code> and <code>(w1, x1)</code>.</li>
+<li><strong><code>wi*xi for wi,xi in ...</code>:</strong> For each pair, the weight <code>wi</code> is multiplied by the input <code>xi</code>. Since <code>wi</code> and <code>xi</code> are both <code>Value</code> objects (or <code>xi</code> is converted to <code>Value</code> by <code>micrograd</code>'s <code>__mul__</code> method if it's a regular number), these multiplications create new <code>Value</code> objects that automatically become part of the computational graph.</li>
+<li><strong><code>sum(..., self.b)</code>:</strong> All these products (<code>wi*xi</code>) are summed together, and finally, the bias <code>self.b</code> is added. The <code>sum</code> function here works directly with <code>Value</code> objects, chaining additions and building the graph. The result, <code>act</code>, is a new <code>Value</code> object representing the total weighted sum.</li>
+<li><strong><code>act.relu() if self.nonlin else act</code>:</strong> If <code>self.nonlin</code> is <code>True</code> (which it is by default), the <code>relu()</code> method is called on the <code>act</code> <code>Value</code> object. As seen in <a href="01_value.html">Chapter 1: Value</a>, <code>relu()</code> creates a new <code>Value</code> object that holds <code>max(0, act.data)</code>. This introduces non-linearity, which is crucial for neural networks to learn complex patterns. If <code>nonlin</code> is <code>False</code>, the neuron acts as a simple linear unit, just outputting the <code>act</code> value directly.</li>
+</ol>
+<h3><code>parameters()</code>: Exposing Learnable Values</h3>
+<p>The <code>Neuron</code> class, by inheriting from <code>Module</code>, must provide a way to list its learnable parameters. This is done through the <code>parameters()</code> method:</p>
+<pre><code class="language-python"># From micrograd/nn.py (inside Neuron class)
+
+    def parameters(self):
+        # Returns all weights and the bias as a single list of Value objects
+        return self.w + [self.b]
+</code></pre>
+<p>This method simply concatenates the list of weights <code>self.w</code> with a list containing the single bias <code>self.b</code>. Now, if we have a <code>Neuron</code> instance called <code>n</code>, we can easily get all its learnable <code>Value</code> objects by calling <code>n.parameters()</code>. This allows a higher-level <code>Module</code> (like a <code>Layer</code>) to efficiently collect and manage the parameters of all its constituent neurons, as we saw in <a href="03_module.html">Chapter 3: Module</a>.</p>
+<h3><code>__repr__</code>: For Debugging</h3>
+<p>The <code>__repr__</code> method provides a helpful string representation of the neuron, making it easier to inspect in an interactive session.</p>
+<pre><code class="language-python"># From micrograd/nn.py (inside Neuron class)
+
+    def __repr__(self):
+        return f&quot;{'ReLU' if self.nonlin else 'Linear'}Neuron({len(self.w)})&quot;
+</code></pre>
+<h2>Neuron in Action: A Simple Example</h2>
+<p>Let's create a <code>Neuron</code> and see it process some inputs:</p>
+<pre><code class="language-python">from micrograd.engine import Value
+from micrograd.nn import Neuron
+
+# Create a neuron that expects 3 inputs
+n = Neuron(3)
+
+print(n) # Check its representation
+print(f&quot;Initial weights: {[w.data for w in n.w]}&quot;)
+print(f&quot;Initial bias: {n.b.data}&quot;)
+
+# Provide 3 input values
+inputs = [Value(1.0), Value(2.0), Value(-3.0)]
+
+# Perform the forward pass
+output = n(inputs)
+
+print(f&quot;\nNeuron output: {output.data:.4f}&quot;)
+
+# The output is a Value object, so we can call backward() on it
+output.backward()
+
+# Now, inspect the gradients of the neuron's parameters
+print(f&quot;\nGradients after backward pass:&quot;)
+for i, w in enumerate(n.w):
+    print(f&quot;Weight {i} grad: {w.grad:.4f}&quot;)
+print(f&quot;Bias grad: {n.b.grad:.4f}&quot;)
+
+# And remember to zero the gradients before the next step
+n.zero_grad()
+print(f&quot;\nGradients after zero_grad:&quot;)
+for i, w in enumerate(n.w):
+    print(f&quot;Weight {i} grad: {w.grad:.4f}&quot;)
+print(f&quot;Bias grad: {n.b.grad:.4f}&quot;)
+</code></pre>
+<p>Example Output (weights will vary due to random initialization):</p>
+<pre><code>ReLUNeuron(3)
+Initial weights: [-0.6025062061099605, 0.4491741160350702, 0.812368936082531]
+Initial bias: 0
+
+Neuron output: 0.0000
+
+Gradients after backward pass:
+Weight 0 grad: 0.0000
+Weight 1 grad: 0.0000
+Weight 2 grad: 0.0000
+Bias grad: 0.0000
+
+Gradients after zero_grad:
+Weight 0 grad: 0.0000
+Weight 1 grad: 0.0000
+Weight 2 grad: 0.0000
+Bias grad: 0.0000
+</code></pre>
+<p>Wait, why are all gradients zero? In this particular run, the <code>output.data</code> was <code>0.0</code>. This likely means the weighted sum <code>act</code> was negative, and <code>relu()</code> clamped it to <code>0</code>. When ReLU outputs <code>0</code>, its derivative (and thus the gradient flow) is <code>0</code>. Let's try to ensure a positive output for a better gradient example.</p>
+<pre><code class="language-python">from micrograd.engine import Value
+from micrograd.nn import Neuron
+
+n = Neuron(2, nonlin=False) # Create a linear neuron for simplicity
+n.w = [Value(0.5), Value(1.0)] # Manually set weights
+n.b = Value(0.1) # Manually set bias
+
+inputs = [Value(2.0), Value(3.0)]
+
+output = n(inputs) # (0.5 * 2.0) + (1.0 * 3.0) + 0.1 = 1.0 + 3.0 + 0.1 = 4.1
+
+print(f&quot;Neuron output: {output.data:.4f}&quot;)
+
+output.backward()
+
+print(f&quot;\nGradients after backward pass:&quot;)
+for i, w in enumerate(n.w):
+    print(f&quot;Weight {i} grad: {w.grad:.4f}&quot;)
+print(f&quot;Bias grad: {n.b.grad:.4f}&quot;)
+
+# And remember to zero the gradients before the next step
+n.zero_grad()
+print(f&quot;\nGradients after zero_grad:&quot;)
+for i, w in enumerate(n.w):
+    print(f&quot;Weight {i} grad: {w.grad:.4f}&quot;)
+print(f&quot;Bias grad: {n.b.grad:.4f}&quot;)
+</code></pre>
+<p>Output with manual weights/bias and <code>nonlin=False</code>:</p>
+<pre><code>Neuron output: 4.1000
+
+Gradients after backward pass:
+Weight 0 grad: 2.0000
+Weight 1 grad: 3.0000
+Bias grad: 1.0000
+
+Gradients after zero_grad:
+Weight 0 grad: 0.0000
+Weight 1 grad: 0.0000
+Bias grad: 0.0000
+</code></pre>
+<p>Now we see meaningful gradients! For a linear neuron <code>output = w0*x0 + w1*x1 + b</code>:</p>
+<ul>
+<li><code>d(output)/dw0 = x0</code> (which is <code>2.0</code>)</li>
+<li><code>d(output)/dw1 = x1</code> (which is <code>3.0</code>)</li>
+<li><code>d(output)/db = 1</code></li>
+</ul>
+<p>Since we called <code>output.backward()</code>, <code>output.grad</code> was initialized to <code>1.0</code>. <code>micrograd</code> then used the chain rule (as described in <a href="02_backward.html">Chapter 2: backward</a>) to correctly propagate this <code>1.0</code> backward to <code>w0</code>, <code>w1</code>, and <code>b</code>, resulting in their respective <code>grad</code> values being <code>2.0</code>, <code>3.0</code>, and <code>1.0</code>. Finally, <code>n.zero_grad()</code> reset them all to <code>0</code>.</p>
+<h2>The Neuron's Computational Graph</h2>
+<p>Let's visualize a simple <code>Neuron</code> with two inputs, <code>x0</code> and <code>x1</code>, its weights <code>w0</code>, <code>w1</code>, and bias <code>b</code>.</p>
+<pre class="mermaid">sequenceDiagram
+    participant x0 as Value x0
+    participant w0 as Value w0
+    participant x1 as Value x1
+    participant w1 as Value w1
+    participant b as Value b
+    participant p0 as Value p0 (w0 * x0)
+    participant p1 as Value p1 (w1 * x1)
+    participant s0 as Value s0 (p0 + p1)
+    participant act as Value act (s0 + b)
+    participant out as Value out (act.relu())
+
+    x0->>p0: * w0
+    w0-->>p0: 'links to w0'
+    x1->>p1: * w1
+    w1-->>p1: 'links to w1'
+    p0->>s0: + p1
+    p1-->>s0: 'links to p1'
+    s0->>act: + b
+    b-->>act: 'links to b'
+    act->>out: relu()
+</pre>
+<p>This diagram illustrates how the <code>__call__</code> method builds a small but complete computational graph for each neuron's calculation. Every intermediate step (like <code>p0</code>, <code>p1</code>, <code>s0</code>, <code>act</code>, <code>out</code>) is a <code>Value</code> object, automatically tracking its parent <code>Value</code> objects and the operation that created it. This is how <code>micrograd</code> is able to backpropagate gradients through the entire neuron.</p>
+<h2>What's Next?</h2>
+<p>We've now successfully built and understood the fundamental processing unit: the <code>Neuron</code>. It combines inputs, applies weights and biases, and uses an activation function to produce an output, all while building a computational graph for gradient calculation.</p>
+<p>However, a single neuron is typically not powerful enough for complex tasks. Neural networks are made of many neurons working together in organized structures. In the next chapter, <a href="05_layer.html">Layer</a>, we will learn how to combine multiple <code>Neuron</code> objects to form a <code>Layer</code>, enabling parallel processing and adding more complexity to our neural network.</p>
+
+  <nav class="chapter-nav">
+    <span><a href="03_module.html">&larr; Module</a></span>
+    <span><a href="05_layer.html">Layer &rarr;</a></span>
+  </nav>
+</body>
+</html>

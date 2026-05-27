@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Module — micrograd</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; micrograd tour</a></p>
+<h1>Chapter 3: Module</h1>
+<p>In <a href="01_value.html">Chapter 1: Value</a>, we learned how <code>Value</code> objects wrap numbers and build a computational graph, automatically remembering all calculations. In <a href="02_backward.html">Chapter 2: backward</a>, we mastered how to traverse this graph in reverse using <code>backward()</code> to calculate the &quot;sensitivity scores&quot; (gradients) for every <code>Value</code> object involved. This automated backpropagation is the core engine for learning.</p>
+<h2>The Problem: Managing a Neural Network's Internal Parts</h2>
+<p>Imagine you're building a sophisticated machine, like a car. You wouldn't just have a pile of nuts, bolts, and wires (our <code>Value</code> objects) lying around. Instead, you'd organize them into larger, functional units: an engine, a transmission, a wheel assembly. Each unit has its own specific job and contains many smaller parts.</p>
+<p>Neural networks are similar. They aren't just a single mathematical expression, but a collection of interconnected &quot;neurons&quot; and &quot;layers.&quot; Each of these components, in turn, contains many <code>Value</code> objects representing learnable parameters (weights and biases).</p>
+<p>Consider the task of training such a network. During each training step, we calculate gradients with <code>backward()</code>. But before we can calculate <em>new</em> gradients for the <em>next</em> training step, we need to &quot;clean the slate.&quot; All the <code>grad</code> attributes on every single weight and bias <code>Value</code> object from the <em>previous</em> step must be reset to <code>0</code>. If we don't, the gradients will accumulate incorrectly, leading to faulty updates.</p>
+<p>How do we efficiently find and reset the <code>grad</code> for potentially thousands or millions of <code>Value</code> objects spread across a complex network structure? And how do we access all these learnable <code>Value</code> objects when it's time to update them? Manually tracking them would be a nightmare!</p>
+<h2>Introducing <code>Module</code>: The Blueprint for Organized Components</h2>
+<p>This is where the <code>Module</code> class comes in. It's a foundational blueprint provided by <code>micrograd</code> for any part of a neural network that contains learnable parameters. Think of <code>Module</code> as a standard contract or interface. It doesn't do much on its own, but it ensures that any component built <em>from</em> it (like a <code>Neuron</code> or a <code>Layer</code>) will adhere to a consistent way of managing its internal <code>Value</code> objects.</p>
+<p>A <code>Module</code> is like a blueprint for a LEGO set piece that ensures all &quot;buildable&quot; components have a standard way to:</p>
+<ol>
+<li><strong>&quot;Clean up&quot; their internal parts:</strong> Reset the <code>grad</code> attribute of all their learnable <code>Value</code> objects to <code>0</code>.</li>
+<li><strong>&quot;List all their buildable parts&quot;:</strong> Provide a list of all their learnable <code>Value</code> objects (weights and biases) so they can be inspected or updated.</li>
+</ol>
+<p>Let's look at <code>micrograd</code>'s <code>Module</code> class:</p>
+<pre><code class="language-python"># From micrograd/nn.py
+class Module:
+
+    def zero_grad(self):
+        for p in self.parameters():
+            p.grad = 0
+
+    def parameters(self):
+        return []
+</code></pre>
+<p>Notice a few key things:</p>
+<ul>
+<li>It's a very small class! It defines two methods: <code>zero_grad()</code> and <code>parameters()</code>.</li>
+<li>The <code>parameters()</code> method, in the base <code>Module</code> class, simply returns an empty list. This is because the base <code>Module</code> itself doesn't hold any parameters directly. It's meant to be subclassed.</li>
+<li>The <code>zero_grad()</code> method iterates through the list returned by <code>self.parameters()</code> and sets each <code>Value</code> object's <code>grad</code> attribute to <code>0</code>.</li>
+</ul>
+<p>This means any class that inherits from <code>Module</code> <em>must</em> implement its own <code>parameters()</code> method to correctly return all the <code>Value</code> objects it contains that are meant to be learned. <code>Module</code> then provides the <code>zero_grad()</code> functionality automatically based on that.</p>
+<h2><code>zero_grad()</code>: The Gradient Reset Button</h2>
+<p>The <code>zero_grad()</code> method is crucial for the training loop of a neural network. After each <code>backward()</code> call, gradients are calculated and stored in the <code>grad</code> attribute of <code>Value</code> objects. Before the next iteration of training (where we'll calculate new gradients from a new batch of data), we must reset these gradients to <code>0</code>.</p>
+<p>Why <code>0</code>? Because gradients from different backward passes for different data points or steps should not accumulate. Each <code>backward()</code> call calculates the gradient for a specific loss, and those gradients are then used to update the parameters. If you don't reset, you're effectively adding gradients from the previous step, which would corrupt the learning process.</p>
+<p>For example, if you have a neural network named <code>model</code>, you can simply call:</p>
+<pre><code class="language-python"># Assuming 'model' is an instance of a class that inherits from Module
+model.zero_grad()
+</code></pre>
+<p>And <code>micrograd</code> will ensure that every single learnable <code>Value</code> object within that <code>model</code> has its <code>grad</code> attribute set to <code>0</code>, ready for a fresh gradient calculation. This saves you from tedious manual resets like <code>model.layer1.neuron1.w[0].grad = 0</code>.</p>
+<h2><code>parameters()</code>: The Inventory List</h2>
+<p>The <code>parameters()</code> method acts as a standard interface to retrieve all learnable <code>Value</code> objects within a module. For the base <code>Module</code> class, it returns an empty list, as it's just a template. However, any <em>subclass</em> of <code>Module</code> (like <code>Neuron</code>, <code>Layer</code>, or <code>MLP</code>) will override this method to return a list of all its weights and biases, which are indeed <code>Value</code> objects.</p>
+<p>For example, if a <code>Neuron</code> contains weights <code>w</code> and a bias <code>b</code> (all <code>Value</code> objects), its <code>parameters()</code> method would return <code>self.w + [self.b]</code>. This allows higher-level modules (like a <code>Layer</code> containing multiple <code>Neuron</code>s) to also implement <code>parameters()</code> by collecting the parameters from <em>its</em> constituent <code>Neuron</code>s. This forms a recursive structure that allows <code>zero_grad()</code> to work across the entire network.</p>
+<h2>How <code>Module</code> Enables Network Management</h2>
+<p>The <code>Module</code> class is a powerful abstraction because it makes it incredibly easy to manage the state of an entire neural network, no matter how complex it becomes.</p>
+<p>Consider a full Multi-Layer Perceptron (MLP) network, which is composed of multiple <code>Layer</code>s, and each <code>Layer</code> is composed of multiple <code>Neuron</code>s. By having <code>Neuron</code>, <code>Layer</code>, and <code>MLP</code> all inherit from <code>Module</code> and correctly implement <code>parameters()</code>, a single call to <code>mlp_model.zero_grad()</code> effectively drills down through the entire network, resetting all gradients.</p>
+<pre class="mermaid">sequenceDiagram
+    participant MLP as MLP (Module)
+    participant L1 as Layer 1 (Module)
+    participant N1 as Neuron 1 (Module)
+    participant Val as Value (parameter)
+
+    Note over MLP: Network ready for new forward pass
+    MLP->>MLP: zero_grad()
+    MLP->>L1: calls L1.parameters()
+    L1->>N1: calls N1.parameters()
+    N1->>Val: returns its Value objects (weights, bias)
+    Val-->>N1: list of Value objects
+    N1-->>L1: list of Value objects
+    L1-->>MLP: aggregated list of Value objects
+    MLP->>Val: iterates through list, sets p.grad = 0
+    Note over Val: All p.grad are now 0
+    Note over MLP: Ready for forward and backward pass
+</pre>
+<p>This diagram illustrates how <code>zero_grad()</code> on the top-level <code>MLP</code> module works. It recursively gathers all the <code>Value</code> objects that represent learnable parameters from its layers and neurons, and then resets their gradients. This ensures consistency and correctness across the entire network.</p>
+<h2>What's Next?</h2>
+<p>We've established <code>Module</code> as the crucial organizational blueprint for neural network components, providing standard ways to manage learnable <code>Value</code> objects. Now that we have this framework, we can start building the fundamental units of a neural network.</p>
+<p>In the next chapter, <a href="04_neuron.html">Neuron</a>, we will put <code>Value</code> and <code>Module</code> into practice by constructing the most basic processing unit of a neural network: a single neuron, which calculates a weighted sum of its inputs and applies an activation function.</p>
+
+  <nav class="chapter-nav">
+    <span><a href="02_backward.html">&larr; backward</a></span>
+    <span><a href="04_neuron.html">Neuron &rarr;</a></span>
+  </nav>
+</body>
+</html>

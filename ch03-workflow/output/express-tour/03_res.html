@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>res — express</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; express tour</a></p>
+<h1>Chapter 3: res</h1>
+<p>In <a href="01_app.html">Chapter 1: app</a>, we established <code>app</code> as the main switchboard operator for your web server. Then, in <a href="02_req.html">Chapter 2: req</a>, we explored how the <code>req</code> object allows your server to &quot;read&quot; all the incoming details from a client's request—like a detailed order form filled out by a customer. But what happens after your server has processed the request? How does it <em>send</em> a reply back to the customer? How do you package up the requested information, add a status, and make sure it reaches the right client?</p>
+<p>This is precisely the role of the <code>res</code> object. Short for &quot;response,&quot; this object is the server's reply letter or the <strong>prepared package ready to be sent back</strong>. It's the primary way your application communicates back to the client, providing methods to set the HTTP status, add headers, send various types of data (like HTML, JSON, or files), or even redirect the client to a different URL. Every route handler function receives this <code>res</code> object as its second argument, empowering it to craft and deliver the perfect response.</p>
+<p>Let's see how your server uses this powerful <code>res</code> object to &quot;speak back&quot; to clients.</p>
+<h3>The Most Basic Reply: <code>res.send()</code></h3>
+<p>The simplest way to send <em>any</em> kind of data back to the client is using <code>res.send()</code>. Express is smart enough to often guess the <code>Content-Type</code> header based on the data you provide.</p>
+<pre><code class="language-javascript">const express = require('express');
+const app = express();
+
+app.get('/', (req, res) =&gt; {
+  res.send('Hello from your Express server!'); // Sends a simple text string
+});
+
+app.get('/data', (req, res) =&gt; {
+  res.send({ message: 'This is JSON data', status: 'success' }); // Sends a JSON object
+});
+
+app.listen(3000, () =&gt; console.log('Server running on port 3000'));
+</code></pre>
+<ul>
+<li>When you visit <code>/</code>, <code>res.send()</code> sends the string <code>'Hello from your Express server!'</code> and automatically sets the <code>Content-Type</code> header to <code>text/html</code>.</li>
+<li>When you visit <code>/data</code>, <code>res.send()</code> detects that you've passed an object and automatically converts it to a JSON string, setting the <code>Content-Type</code> header to <code>application/json</code>.</li>
+</ul>
+<p>This method is like putting a simple note into an envelope and sending it off, letting the postal service figure out the basic delivery details.</p>
+<h3>Setting the Tone: HTTP Status Codes</h3>
+<p>Every HTTP response needs a status code to tell the client whether the request was successful, if there was an error, or if something else happened. Think of this as the &quot;outcome&quot; stamp on your package—was it delivered successfully (200 OK), not found (404 Not Found), or was there a server error (500 Internal Server Error)?</p>
+<h4><code>res.status(code)</code>: Setting the Status</h4>
+<p>This method sets the HTTP status code for the response. You still need to send data afterward.</p>
+<pre><code class="language-javascript">app.get('/not-found', (req, res) =&gt; {
+  res.status(404).send('Sorry, the page you requested could not be found.');
+});
+
+app.post('/create-item', (req, res) =&gt; {
+  // Imagine item was successfully created
+  res.status(201).send('Item created successfully!'); // 201 Created
+});
+</code></pre>
+<p>Here, <code>res.status(404)</code> explicitly tells the client &quot;Not Found&quot; before <code>res.send()</code> delivers the custom message.</p>
+<h4><code>res.sendStatus(code)</code>: Status with a Standard Message</h4>
+<p>For common status codes, <code>res.sendStatus()</code> is a convenient shortcut. It sets the status code <em>and</em> sends a default, human-readable message associated with that code (e.g., &quot;Not Found&quot; for 404).</p>
+<pre><code class="language-javascript">app.get('/unauthorized', (req, res) =&gt; {
+  res.sendStatus(401); // Sends &quot;Unauthorized&quot; as the body
+});
+
+app.get('/ok', (req, res) =&gt; {
+  res.sendStatus(200); // Sends &quot;OK&quot; as the body
+});
+</code></pre>
+<p>This is like sending a pre-printed response card with a standard message for common scenarios.</p>
+<h3>Sending Specific Content Types</h3>
+<p>While <code>res.send()</code> is versatile, <code>res</code> also provides specialized methods for common data types, ensuring the correct headers are set for optimal client handling.</p>
+<h4><code>res.json(data)</code>: Sending Structured Data</h4>
+<p>When building APIs, sending JSON is incredibly common. <code>res.json()</code> explicitly formats your JavaScript object into a JSON string and sets the <code>Content-Type</code> header to <code>application/json</code>.</p>
+<pre><code class="language-javascript">app.get('/api/users', (req, res) =&gt; {
+  const users = [
+    { id: 1, name: 'Alice' },
+    { id: 2, name: 'Bob' }
+  ];
+  res.json(users); // Sends JSON array
+});
+</code></pre>
+<p>This is like preparing a meticulously organized spreadsheet to send to a business partner, making sure it's in a format they can easily process.</p>
+<h4><code>res.sendFile(path, [options], [callback])</code>: Sending Files</h4>
+<p>To send static files like HTML pages, images, PDFs, or other documents, use <code>res.sendFile()</code>.</p>
+<pre><code class="language-javascript">// Assuming a 'public' directory with 'index.html'
+const path = require('node:path');
+
+app.get('/homepage', (req, res) =&gt; {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+</code></pre>
+<p><strong>Important:</strong> For security and ease of use, it's often better to specify a <code>root</code> directory in the options, especially for dynamic paths. For example, if your file is in a <code>public</code> directory at the root of your project:</p>
+<pre><code class="language-javascript">const path = require('node:path');
+
+app.get('/my-document', (req, res) =&gt; {
+  const options = {
+    root: path.join(__dirname, 'public') // Defines the base directory for files
+  };
+  res.sendFile('document.pdf', options); // Client requests /my-document, server sends public/document.pdf
+});
+</code></pre>
+<p>This is like retrieving a specific item from your warehouse and packaging it for delivery.</p>
+<h4><code>res.download(path, [filename], [callback])</code>: Prompting a Download</h4>
+<p>If you want the client's browser to <em>download</em> a file rather than display it (e.g., download a PDF instead of opening it in a new tab), use <code>res.download()</code>. This sets the <code>Content-Disposition</code> header appropriately.</p>
+<pre><code class="language-javascript">const path = require('node:path');
+
+app.get('/download-report', (req, res) =&gt; {
+  const filePath = path.join(__dirname, 'reports', 'annual_report.pdf');
+  // The user will download a file named 'annual_report.pdf'
+  res.download(filePath, 'annual_report.pdf');
+});
+</code></pre>
+<p>This is like putting a &quot;Download This&quot; label on your package, instructing the client's software on how to handle it.</p>
+<h4><code>res.render(viewName, [locals], [callback])</code>: Sending Dynamic HTML</h4>
+<p>While we'll dive deeper into this in <a href="07_view.html">Chapter 7: View</a>, <code>res.render()</code> is how you send dynamic HTML pages generated from templates.</p>
+<pre><code class="language-javascript">// Example (requires a view engine like EJS, Pug, Handlebars to be set up)
+app.get('/dashboard', (req, res) =&gt; {
+  res.render('dashboard', { userName: 'Charlie', data: ['item1', 'item2'] });
+});
+</code></pre>
+<p>This is like taking a blank letter template, filling it out with personalized information, and then sending the customized letter.</p>
+<h3>Customizing the Package: HTTP Headers and Cookies</h3>
+<p>The <code>res</code> object allows you to control the meta-information sent with your response, much like adding special instructions or labels to your package.</p>
+<h4><code>res.set(field, value)</code>: Setting HTTP Headers</h4>
+<p>You can set any custom HTTP header with <code>res.set()</code> (or its alias <code>res.header()</code>).</p>
+<pre><code class="language-javascript">app.get('/cached-content', (req, res) =&gt; {
+  res.set('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+  res.set('X-Custom-Header', 'My-App-Value');
+  res.send('This content can be cached!');
+});
+</code></pre>
+<p>This is like adding specific shipping labels or handling instructions (e.g., &quot;Fragile,&quot; &quot;Keep Refrigerated&quot;) to your package.</p>
+<h4><code>res.cookie(name, value, [options])</code>: Setting Cookies</h4>
+<p>Cookies are small pieces of data stored on the client's browser. <code>res.cookie()</code> makes it easy to set them, often used for sessions or user preferences.</p>
+<pre><code class="language-javascript">app.get('/set-preference', (req, res) =&gt; {
+  res.cookie('theme', 'dark', { maxAge: 900000, httpOnly: true }); // Expires in 15 mins
+  res.send('Dark theme preference set!');
+});
+</code></pre>
+<h4><code>res.clearCookie(name, [options])</code>: Clearing Cookies</h4>
+<p>To remove a cookie from the client's browser, use <code>res.clearCookie()</code>.</p>
+<pre><code class="language-javascript">app.get('/logout', (req, res) =&gt; {
+  res.clearCookie('session_token');
+  res.send('Logged out successfully!');
+});
+</code></pre>
+<p>These methods are like attaching a tiny, self-destructing sticky note to the client's browser, which can store a small piece of information.</p>
+<h3>Guiding the Client: Redirections</h3>
+<p>Sometimes, instead of sending data, you want to tell the client's browser to navigate to a different URL. This is called a redirection.</p>
+<h4><code>res.redirect(url)</code> or <code>res.redirect(status, url)</code></h4>
+<p><code>res.redirect()</code> sends an HTTP redirect response, typically with a 302 (Found) status by default, telling the browser to load a new page.</p>
+<pre><code class="language-javascript">app.get('/old-path', (req, res) =&gt; {
+  res.redirect('/new-path'); // Redirects to /new-path with status 302
+});
+
+app.get('/moved-permanently', (req, res) =&gt; {
+  res.redirect(301, 'http://www.example.com/permanent-location'); // 301 Moved Permanently
+});
+</code></pre>
+<p>This is like handing a customer a note that says, &quot;We've moved! Please go to this new address for what you're looking for.&quot;</p>
+<h3>The Journey of a Response and <code>res</code></h3>
+<p>Let's trace how the <code>res</code> object is used to send the final reply:</p>
+<pre class="mermaid">sequenceDiagram
+    participant Browser as User's Browser
+    participant ExpressApp as Express App
+    participant Handler as Route Handler
+    participant ResObject as res Object
+    participant NodeServer as Node.js HTTP Server
+
+    Browser->>ExpressApp: HTTP Request
+    ExpressApp->>Handler: Invokes handler (req, res)
+    Handler->>ResObject: Call res.status(), res.set()
+    Handler->>ResObject: Call res.send(), res.json(), or res.sendFile()
+    ResObject->>NodeServer: Prepares and finalizes HTTP Response
+    NodeServer->>Browser: Sends HTTP Response
+</pre>
+<p>As you can see, the <code>Route Handler</code> directly manipulates the <code>res</code> object, which then works with the underlying Node.js HTTP server to construct and send the final response back to the client.</p>
+<h3>Conclusion</h3>
+<p>The <code>res</code> object is your server's voice, its means of replying to every incoming request. From simple text messages to complex JSON APIs, downloadable files, and strategic redirections, <code>res</code> provides all the tools you need to effectively communicate with clients. Mastering <code>res</code> means mastering how your web application delivers its value to users.</p>
+<p>Now that you understand how to read client requests with <code>req</code> and craft server responses with <code>res</code>, you might be wondering about those &quot;pre-processing steps&quot; we briefly mentioned in <a href="01_app.html">Chapter 1: app</a>. How can you run code for <em>every</em> request, or modify requests and responses before they even reach your route handlers? That's the power of <strong>Middleware</strong>, which we'll explore in the next chapter!</p>
+
+  <nav class="chapter-nav">
+    <span><a href="02_req.html">&larr; req</a></span>
+    <span><a href="04_middleware.html">Middleware &rarr;</a></span>
+  </nav>
+</body>
+</html>

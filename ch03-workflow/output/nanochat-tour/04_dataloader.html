@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DataLoader — nanochat</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; nanochat tour</a></p>
+<h1>Chapter 4: DataLoader</h1>
+<p>In <a href="01_tokenizer.html">Chapter 1: Tokenizer</a>, we learned how raw human language is transformed into a stream of numerical tokens, the fundamental currency of a Large Language Model (LLM). Then, in <a href="03_gpt.html">Chapter 3: GPT</a>, we explored the intricate neural network architecture that processes these tokens. But with colossal amounts of data—think gigabytes or even terabytes of text—how do we efficiently deliver these tokens to our GPT model during training?</p>
+<p>Imagine you're trying to feed an entire library of books to a very fast reader. You wouldn't hand them one word at a time, or even one page. You'd want to deliver entire chapters or even whole books, neatly organized and ready to be consumed. Furthermore, if you have multiple readers working in parallel (like GPUs), you'd need a sophisticated system to ensure each reader gets unique, relevant material without wasteful duplication or idle time.</p>
+<p>This is precisely the role of the <strong>DataLoader</strong>. In the context of LLMs, the DataLoader is the unsung hero of the training pipeline, a high-performance data logistics system. Its job is to efficiently fetch raw text, convert it into tokenized sequences using our <a href="01_tokenizer.html">Tokenizer</a>, organize these sequences into optimized batches, and then feed them to the GPT model. It handles complex tasks like shuffling the data for better generalization, intelligently packing variable-length sequences to maximize GPU utilization, and distributing unique data chunks across multiple GPUs in a coordinated fashion.</p>
+<p>Without an efficient DataLoader, even the fastest GPT model would starve for data, rendering the entire training process painfully slow and inefficient.</p>
+<h2>The Data Logistics System: Inside <code>nanochat</code>'s DataLoader</h2>
+<p>The <code>nanochat</code> project's DataLoader, primarily found in <a href="nanochat/dataloader.py"><code>nanochat/dataloader.py</code></a>, is designed for maximal efficiency during pretraining and supervised fine-tuning (SFT). It works hand-in-hand with the tokenizer to prepare data in a format immediately consumable by the <code>GPT</code> model.</p>
+<h3>Fetching Raw Data</h3>
+<p>The <code>DataLoader</code> doesn't directly read raw files. Instead, it relies on a <code>Dataset</code> utility to provide iterators of text. For pretraining, <code>nanochat</code> uses <code>nanochat/dataset.py</code>, which iterates over <code>parquet</code> files containing vast amounts of text.</p>
+<p>The <code>parquets_iter_batched</code> function from <code>nanochat/dataset.py</code> is the initial entry point for raw text:</p>
+<pre><code class="language-python"># nanochat/dataset.py (simplified)
+def parquets_iter_batched(split, start=0, step=1):
+    &quot;&quot;&quot;
+    Iterate through the dataset, in batches of underlying row_groups for efficiency.
+    - split can be &quot;train&quot; or &quot;val&quot;. the last parquet file will be val.
+    - start/step are useful for skipping rows in DDP. e.g. start=rank, step=world_size
+    &quot;&quot;&quot;
+    # ... logic to find and read parquet files ...
+    for filepath in parquet_paths:
+        pf = pq.ParquetFile(filepath)
+        for rg_idx in range(start, pf.num_row_groups, step):
+            rg = pf.read_row_group(rg_idx)
+            texts = rg.column('text').to_pylist()
+            yield texts # yields lists of strings (documents)
+</code></pre>
+<p>This function streams documents, often in batches corresponding to "row groups" within the <code>parquet</code> files, to minimize I/O overhead. The <code>start</code> and <code>step</code> parameters are crucial for distributed training, ensuring each GPU (<code>rank</code>) processes a unique subset of the data.</p>
+<h3><code>tokenizing_distributed_data_loader_bos_bestfit</code>: Efficient Batching</h3>
+<p>The core DataLoader function for pretraining is <code>tokenizing_distributed_data_loader_bos_bestfit</code>. Let's break down its key characteristics:</p>
+<ul>
+<li><strong><code>bos_bestfit</code></strong>: This refers to two critical optimizations:<ul>
+<li><strong>BOS-aligned</strong>: Every sequence (document) in a batch <em>starts</em> with a <code>&lt;|bos|&gt;</code> (Beginning Of Sequence) token. This helps the model understand that each element is a distinct, independent piece of text, which is fundamental for causal language modeling.</li>
+<li><strong>Best-fit packing</strong>: When forming a batch, the DataLoader intelligently tries to fit as many documents as possible into each <code>max_seq_len</code> slot. Instead of simply concatenating documents until the max length is reached (which often leaves significant empty space at the end of a batch element), "best-fit" attempts to find the largest available document from a buffer that perfectly fits the remaining space, minimizing wasted tokens due to padding. This significantly increases GPU utilization.</li>
+</ul>
+</li>
+<li><strong><code>distributed</code></strong>: The DataLoader is aware of <code>torch.distributed</code> and ensures that each GPU (or "rank") in a multi-GPU setup receives a unique stream of data, preventing redundant processing and maximizing throughput.</li>
+</ul>
+<p>Here's a simplified look at how it's used in <a href="scripts/base_train.py"><code>scripts/base_train.py</code></a>:</p>
+<pre><code class="language-python"># scripts/base_train.py (simplified)
+from nanochat.dataloader import tokenizing_distributed_data_loader_bos_bestfit
+
+# ... (tokenizer and model setup) ...
+
+# Initialize the DataLoaders for train/val
+train_loader = tokenizing_distributed_data_loader_bos_bestfit(
+    tokenizer,
+    args.device_batch_size, # e.g., 32
+    args.max_seq_len,       # e.g., 2048
+    split=&quot;train&quot;,
+    device=device
+)
+
+# Fetching a batch for training
+x, y, dataloader_state_dict = next(train_loader)
+# x: input token IDs for the GPT model (B, T)
+# y: target token IDs for loss computation (B, T)
+</code></pre>
+<p>The DataLoader yields <code>x</code> and <code>y</code> tensors. <code>x</code> contains the input token IDs for the model, and <code>y</code> contains the shifted target token IDs. For instance, if <code>x</code> is <code>[token_A, token_B, token_C]</code>, then <code>y</code> would be <code>[token_B, token_C, token_D]</code> if <code>token_D</code> were the next token. This is how the model learns to predict the next token in a sequence.</p>
+<h3><code>tokenizing_distributed_data_loader_with_state_bos_bestfit</code>: Resuming Training</h3>
+<p>A variant, <code>tokenizing_distributed_data_loader_with_state_bos_bestfit</code>, is specifically designed to resume training from a checkpoint. It takes a <code>resume_state_dict</code> and restores the exact position in the dataset, ensuring seamless continuation without re-processing already seen data.</p>
+<pre><code class="language-python"># scripts/base_train.py (simplified)
+from nanochat.dataloader import tokenizing_distributed_data_loader_with_state_bos_bestfit
+
+# ... (load checkpoint, get dataloader_resume_state_dict) ...
+
+train_loader = tokenizing_distributed_data_loader_with_state_bos_bestfit(
+    tokenizer,
+    args.device_batch_size,
+    args.max_seq_len,
+    split=&quot;train&quot;,
+    device=device,
+    resume_state_dict=dataloader_resume_state_dict # key for resuming
+)
+</code></pre>
+<h3>SFT Data Loading: <code>TaskMixture</code></h3>
+<p>For Supervised Fine-Tuning (SFT), <code>nanochat</code> uses a different data source: <code>TaskMixture</code> from <a href="tasks/common.py"><code>tasks/common.py</code></a>. This allows combining various conversational datasets (e.g., MMLU, GSM8K, SmolTalk, custom identity data) into a single logical dataset. The SFT training script (<code>scripts/chat_sft.py</code>) then provides its own <code>sft_data_generator_bos_bestfit</code> function, which wraps <code>TaskMixture</code> and handles tokenization and batching specific to chat conversations. This custom generator also applies a <code>mask</code> (from <code>tokenizer.render_conversation</code>) to the <code>targets</code>, ensuring the model <em>only</em> learns to predict the assistant's responses and not the user's prompts or special formatting tokens.</p>
+<pre><code class="language-python"># scripts/chat_sft.py (simplified snippet)
+from tasks.common import TaskMixture
+from tasks.gsm8k import GSM8K
+from tasks.smoltalk import SmolTalk
+
+train_tasks = [
+    SmolTalk(split=&quot;train&quot;),
+    *[GSM8K(subset=&quot;main&quot;, split=&quot;train&quot;) for _ in range(args.gsm8k_epochs)],
+    # ... other tasks ...
+]
+train_dataset = TaskMixture(train_tasks)
+
+# The sft_data_generator_bos_bestfit function then uses this dataset
+# and calls tokenizer.render_conversation to get (ids, mask) for each example.
+# The mask is used to set target tokens to -1 (ignore_index) for non-assistant tokens.
+</code></pre>
+<h3>The Flow of Data</h3>
+<p>Here's how data flows through these components during training:</p>
+<pre class="mermaid">sequenceDiagram
+    participant R as Raw Text
+    participant D as Dataset
+    participant T as Tokenizer
+    participant DL as DataLoader
+    participant G as GPT Model
+
+    R->>D: 'read text chunks from disk'
+    D->>T: 'raw text documents'
+    T->>T: 'convert to token IDs<br/>and create loss mask'
+    T->>DL: 'token IDs and masks'
+    DL->>DL: 'pack into BOS-aligned batches<br/>with best-fit packing'
+    DL->>DL: 'apply mask to targets'
+    DL-->>G: 'batches of input IDs (x)<br/>and target IDs (y)'
+    G->>G: 'process batch to predict next tokens<br/>and compute loss'
+</pre>
+<h2>Where the DataLoader is Used</h2>
+<p>The DataLoader is a critical component for any data-intensive phase of the LLM lifecycle in <code>nanochat</code>:</p>
+<ul>
+<li><strong>Pretraining (<code>scripts/base_train.py</code>):</strong> This is where the DataLoader truly shines, efficiently streaming billions of tokens from the <code>climbmix-400b-shuffle</code> dataset to train the base GPT model.</li>
+<li><strong>Supervised Fine-tuning (SFT) (<code>scripts/chat_sft.py</code>):</strong> For conversational models, the DataLoader prepares curated chat datasets (often mixtures of various tasks) in an optimized format, including handling conversational roles and tool calls.</li>
+<li><strong>Evaluation (<code>scripts/base_eval.py</code>):</strong> The DataLoader is also used to prepare data for evaluating metrics like Bits Per Byte (BPB), which measures the model's compression capabilities on unseen text.</li>
+</ul>
+<p>By mastering the art of efficient data delivery, the DataLoader ensures that the powerful <a href="03_gpt.html">GPT</a> model can continuously learn without bottlenecks. Now that we've seen how the data is prepared and fed to the model, the next logical question is: how does the model actually <em>learn</em> from this data? How does it adjust its internal parameters to get better at predicting the next token? That's what we'll explore in the next chapter: <a href="05_optimizer.html">Optimizer</a>.</p>
+  <nav class="chapter-nav">
+    <span><a href="03_gpt.html">&larr; GPT</a></span>
+    <span><a href="05_optimizer.html">Optimizer &rarr;</a></span>
+  </nav>
+</body>
+</html>

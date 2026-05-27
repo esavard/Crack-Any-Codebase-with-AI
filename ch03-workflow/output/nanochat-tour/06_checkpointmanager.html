@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CheckpointManager — nanochat</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; nanochat tour</a></p>
+<h1>Chapter 6: CheckpointManager</h1>
+<p>Imagine you're deep into an epic video game quest. You've battled countless monsters, solved intricate puzzles, and gathered rare treasures. Suddenly, your power goes out, or you realize it's 3 AM and you need to sleep. If the game didn't have a <strong>save game</strong> feature, all your progress would be lost! You'd have to start all over again, enduring the same tedious early-game grind.</p>
+<p>Training a large language model like <code>nanochat</code> is remarkably similar to playing such a game, but on a much grander scale. It involves iterating through billions of tokens (our &quot;training data&quot;), adjusting billions of parameters (our &quot;model's brain&quot;) using sophisticated algorithms like <a href="05_muonadamw.html">MuonAdamW</a>, and calculating performance metrics, all over many hours or even days. What happens if your GPU node crashes? Or if you want to experiment with different fine-tuning strategies starting from a particular point in pre-training? Or perhaps you've achieved a desired performance level and want to deploy <em>that specific version</em> of your model for inference?</p>
+<p>This is where the <strong>CheckpointManager</strong> comes in. Think of it as <code>nanochat</code>'s robust &quot;save game&quot; system. It periodically takes a complete snapshot of the model's entire state and its trainer's progress (like the optimizer parameters) and saves them securely to disk. This allows you to pause training, resume later exactly where you left off, or recall any specific version of your trained model, ensuring that no hard-earned learning is ever truly lost.</p>
+<pre class="mermaid">sequenceDiagram
+    participant T as Trainer
+    participant CM as Checkpoint Manager
+    participant MP as Model Parameters
+    participant OS as Optimizer State
+    participant D as Disk Storage
+
+    T->>CM: 'Save training progress'
+    CM->>MP: Get current weights
+    CM->>OS: Get optimizer state
+    CM->>D: Write checkpoint files
+    D-->>CM: Confirmation
+    CM-->>T: 'Progress saved'
+
+    T->>CM: 'Resume training'
+    CM->>D: Read checkpoint files
+    D-->>CM: Checkpoint data
+    CM->>MP: Load saved weights
+    CM->>OS: Load optimizer state
+    CM-->>T: 'Training restored'
+</pre>
+<p>The core logic for <code>nanochat</code>'s checkpointing resides in <code>nanochat/checkpoint_manager.py</code>.</p>
+<h3>What's in a Checkpoint?</h3>
+<p>A <code>nanochat</code> checkpoint is more than just the model's weights. It's a comprehensive record of the training state, typically including:</p>
+<ol>
+<li><strong>Model Parameters:</strong> The billions of learned weights and biases (the <code>state_dict</code> of our <a href="02_gpt.html">GPT</a> module) that define the model's knowledge and capabilities.</li>
+<li><strong>Optimizer State:</strong> The internal state of the optimizer (e.g., the <code>exp_avg</code> and <code>exp_avg_sq</code> momentum buffers for <a href="05_muonadamw.html">MuonAdamW</a>). These are crucial for the optimizer to continue applying updates correctly from where it left off.</li>
+<li><strong>Metadata:</strong> Additional information about the training run, such as:
+<ul>
+<li>The current <code>step</code> number.</li>
+<li>The last calculated <code>validation bpb</code> (bits per byte) or loss.</li>
+<li>The <code>model_config</code> that defines the architecture.</li>
+<li>The <code>user_config</code> (command-line arguments) that launched the run.</li>
+<li>The <code>dataloader_state_dict</code> from <a href="04_dataloader.html">DataLoader</a>, allowing data loading to resume from the exact position in the dataset.</li>
+<li>Any other &quot;loop state&quot; variables needed for a seamless resume.</li>
+</ul>
+</li>
+</ol>
+<h3>Saving Checkpoints</h3>
+<p>The <code>save_checkpoint</code> function is the primary mechanism for persisting this state.</p>
+<pre><code class="language-python"># nanochat/checkpoint_manager.py
+
+import os
+import torch
+import json
+import shutil
+import glob
+import re
+
+from nanochat.common import print0, get_base_dir
+
+def save_checkpoint(checkpoint_dir, step, model_state, optimizer_state, meta_data, rank=0):
+    &quot;&quot;&quot;
+    Saves a training checkpoint to disk.
+
+    - model_state: dict of model parameters (orig_model.state_dict())
+    - optimizer_state: dict of optimizer state (optimizer.state_dict())
+    - meta_data: dict of any additional metadata (e.g., step, loss, configs)
+    - rank: for DDP, only rank 0 saves the model, but all ranks save optimizer state
+    &quot;&quot;&quot;
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    step_str = f&quot;{step:06d}&quot;
+
+    # Only master rank saves the full model state
+    if rank == 0:
+        model_filepath = os.path.join(checkpoint_dir, f&quot;model_{step_str}.pt&quot;)
+        torch.save(model_state, model_filepath)
+        print0(f&quot;Saved model checkpoint to {model_filepath}&quot;)
+
+    # All ranks save their portion of the optimizer state (if distributed)
+    if optimizer_state is not None:
+        optimizer_filepath = os.path.join(checkpoint_dir, f&quot;optimizer_{step_str}_rank{rank}.pt&quot;)
+        torch.save(optimizer_state, optimizer_filepath)
+        print0(f&quot;Saved optimizer checkpoint to {optimizer_filepath}&quot;)
+
+    # Only master rank saves metadata
+    if rank == 0:
+        meta_filepath = os.path.join(checkpoint_dir, f&quot;meta_{step_str}.json&quot;)
+        with open(meta_filepath, 'w') as f:
+            json.dump(meta_data, f, indent=2)
+        print0(f&quot;Saved metadata to {meta_filepath}&quot;)
+
+    # Manage old checkpoints to keep disk usage low
+    _clean_old_checkpoints(checkpoint_dir)
+</code></pre>
+<p>Key aspects of <code>save_checkpoint</code>:</p>
+<ul>
+<li><strong>Directory Structure</strong>: Checkpoints are stored in a <code>checkpoint_dir</code> (e.g., <code>~/.cache/nanochat/base_checkpoints/d24</code>).</li>
+<li><strong>Step-based Naming</strong>: Each checkpoint is named with a padded step number (e.g., <code>model_000500.pt</code>, <code>optimizer_000500_rank0.pt</code>), making it easy to identify and load specific versions.</li>
+<li><strong>Distributed Training (DDP)</strong>: In a multi-GPU setup, only the <code>master_process</code> (rank 0) saves the full <code>model_state</code>. However, each rank saves its <em>own portion</em> of the <code>optimizer_state</code> (<code>optimizer_000500_rank0.pt</code>, <code>optimizer_000500_rank1.pt</code>, etc.) if the optimizer state is sharded (as in <code>DistMuonAdamW</code> from <a href="05_muonadamw.html">MuonAdamW</a>). This optimizes memory by not replicating optimizer state across all GPUs.</li>
+<li><strong>Metadata</strong>: A <code>.json</code> file (<code>meta_000500.json</code>) accompanies the model and optimizer states, containing all the crucial context for resuming.</li>
+<li><strong>Automatic Cleanup</strong>: The <code>_clean_old_checkpoints</code> helper ensures that older checkpoints are pruned, preventing disk space from filling up excessively.</li>
+</ul>
+<p>In <code>scripts/base_train.py</code>, the <code>save_checkpoint</code> function is called regularly (e.g., every <code>args.save_every</code> steps) and at the very end of training:</p>
+<pre><code class="language-python"># scripts/base_train.py (excerpt)
+
+    # ... (inside the training loop)
+    if last_step or (step &gt; 0 and step != args.resume_from_step and args.save_every &gt; 0 and step % args.save_every == 0):
+        save_checkpoint(
+            checkpoint_dir,
+            step,
+            orig_model.state_dict(), # model parameters
+            optimizer.state_dict(), # optimizer state
+            { # metadata saved as json
+                &quot;step&quot;: step,
+                &quot;val_bpb&quot;: val_bpb, # loss at last step
+                &quot;model_config&quot;: model_config_kwargs,
+                &quot;user_config&quot;: user_config, # inputs to the training script
+                &quot;device_batch_size&quot;: args.device_batch_size,
+                &quot;max_seq_len&quot;: args.max_seq_len,
+                &quot;total_batch_size&quot;: total_batch_size,
+                &quot;dataloader_state_dict&quot;: dataloader_state_dict, # &lt;-- Important for resuming data loading
+                &quot;loop_state&quot;: { # all loop state (other than step) so that we can resume training
+                    &quot;min_val_bpb&quot;: min_val_bpb,
+                    &quot;smooth_train_loss&quot;: smooth_train_loss,
+                    &quot;total_training_time&quot;: total_training_time,
+                },
+            },
+            rank=ddp_rank,
+        )
+    # ...
+</code></pre>
+<h3>Loading Checkpoints</h3>
+<p>Loading involves reversing this process, carefully re-instating the model and optimizer states. <code>nanochat</code> provides a <code>load_model</code> utility function that orchestrates this, automatically finding the correct checkpoint files and loading them onto the specified device.</p>
+<pre><code class="language-python"># nanochat/checkpoint_manager.py (excerpt)
+
+def load_checkpoint(checkpoint_dir, step, device, load_optimizer=False, rank=0):
+    &quot;&quot;&quot;
+    Loads a training checkpoint from disk.
+    Returns (model_state, optimizer_state, meta_data) or just (model_state, meta_data) if load_optimizer=False.
+    &quot;&quot;&quot;
+    # ... (logic to find correct step number and file paths)
+
+    # Load model state (only rank 0 has the full state, others get it via DDP broadcast)
+    model_state = torch.load(model_filepath, map_location=device)
+    if torch.distributed.is_initialized():
+        # Broadcast model_state from rank 0 to all other ranks
+        if rank != 0:
+            model_state = [None]
+        dist.broadcast_object_list(model_state, src=0, device=device)
+        if rank != 0:
+            model_state = model_state[0]
+
+    # Load optimizer state (each rank loads its own sharded state)
+    optimizer_state = None
+    if load_optimizer:
+        optimizer_filepath = os.path.join(checkpoint_dir, f&quot;optimizer_{step_str}_rank{rank}.pt&quot;)
+        optimizer_state = torch.load(optimizer_filepath, map_location=device)
+
+    # Load metadata
+    meta_filepath = os.path.join(checkpoint_dir, f&quot;meta_{step_str}.json&quot;)
+    with open(meta_filepath, 'r') as f:
+        meta_data = json.load(f)
+
+    # ... (return loaded states)
+</code></pre>
+<p>In distributed training, the <code>model_state</code> is only physically present on rank 0's disk. When <code>load_checkpoint</code> is called, rank 0 loads the model and then <code>dist.broadcast_object_list</code> sends a copy to all other ranks. Each rank, however, directly loads its own sharded <code>optimizer_state</code>.</p>
+<p>The <code>load_model</code> wrapper (not shown here, but defined in the same file) builds the <code>GPT</code> model and its tokenizer, then calls <code>load_checkpoint</code> to populate them. It also intelligently handles finding the latest step if a specific <code>step</code> is not provided.</p>
+<p>In <code>scripts/base_train.py</code>, <code>load_checkpoint</code> is crucial for resuming interrupted training:</p>
+<pre><code class="language-python"># scripts/base_train.py (excerpt)
+
+    # If we are resuming, overwrite the model parameters with those of the checkpoint
+    # ...
+    resuming = args.resume_from_step != -1
+    if resuming:
+        print0(f&quot;Resuming optimization from step {args.resume_from_step}&quot;)
+        model_data, optimizer_data, meta_data = load_checkpoint(checkpoint_dir, args.resume_from_step, device, load_optimizer=True, rank=ddp_rank)
+        model.load_state_dict(model_data, strict=True, assign=True)
+        del model_data # free up this memory after the copy
+    # ...
+    # Initialize the Optimizer ... (later loads optimizer_data)
+    # ...
+    # Initialize the DataLoaders for train/val ... (dataloader_resume_state_dict comes from meta_data)
+</code></pre>
+<p>This ensures that the model, optimizer, and even the data loader all restart precisely where they left off.</p>
+<h3>Checkpoints for Fine-tuning and Inference</h3>
+<p>Checkpoints aren't just for resuming training; they're also fundamental for moving between different training stages or deploying models:</p>
+<ul>
+<li>
+<p><strong>Supervised Fine-Tuning (SFT)</strong>: The <code>scripts/chat_sft.py</code> script starts by loading a <code>base</code> model checkpoint, usually the latest or best-performing one from pre-training. It then continues to train this model on conversational data.</p>
+<pre><code class="language-python"># scripts/chat_sft.py (excerpt)
+# ...
+# Load the model and tokenizer
+model, tokenizer, meta = load_model(&quot;base&quot;, device, phase=&quot;train&quot;, model_tag=args.model_tag, step=args.model_step)
+# ... (then init optimizer and continue SFT training)
+</code></pre>
+</li>
+<li>
+<p><strong>Inference</strong>: When you want to chat with your model using <code>scripts/chat_cli.py</code> or <code>scripts/chat_web.py</code>, these scripts load a fully trained <code>sft</code> (or <code>rl</code>) model checkpoint to power the conversation. No optimizer state is needed here, only the model parameters.</p>
+</li>
+</ul>
+<p>The <code>CheckpointManager</code> acts as the steadfast archivist and restorer of your LLM's learning journey, guaranteeing that the immense computational investment in training is preserved and reusable across various stages and applications.</p>
+<p>Now that we understand how <code>nanochat</code> saves and loads its entire &quot;brain,&quot; the next logical step is to explore how we define what that brain should <em>do</em>. How do we specify the problems, questions, or tasks we want the LLM to learn or evaluate itself on? That's the exciting topic of the next chapter, where we'll delve into the <code>Task</code> abstraction.</p>
+
+  <nav class="chapter-nav">
+    <span><a href="05_muonadamw.html">&larr; MuonAdamW</a></span>
+    <span><a href="07_task.html">Task &rarr;</a></span>
+  </nav>
+</body>
+</html>

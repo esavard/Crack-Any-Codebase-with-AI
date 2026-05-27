@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>render_template — flask</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; flask tour</a></p>
+<h1>Chapter 7: render_template</h1>
+<p>You've built a Flask application that can receive requests (using the <code>Request</code> object, as seen in <a href="03_request.html">Chapter 3: Request</a>), understand their intent, and even generate smart URLs (with <code>url_for</code> from <a href="06_url_for.html">Chapter 6: url_for</a>). You know how to send back a basic text response (via the <code>Response</code> object in <a href="04_response.html">Chapter 4: Response</a>). But how do you create rich, dynamic web pages—pages that combine a consistent design with ever-changing data, like a user's name, their shopping cart items, or search results?</p>
+<p>Returning simple HTML strings directly from your view functions, as we've done so far, quickly becomes cumbersome and unmanageable for anything beyond &quot;Hello, World!&quot;. It's like trying to bake a new cake from scratch every time, rather than having a well-tested recipe and simply swapping out ingredients.</p>
+<p>This is where templating engines come in, and Flask integrates beautifully with <strong>Jinja2</strong>. The <code>render_template</code> function is your chef, taking a Jinja2 template file (your carefully crafted recipe or HTML blueprint) and filling it with dynamic data (your fresh ingredients). It's like a designer taking a standard form and populating it with specific details to create a personalized document for each user, then returning the result.</p>
+<p>The core idea is to separate your presentation (the HTML structure and styling) from your application logic (the Python code that fetches and processes data). Your view functions will gather the necessary data, and then <code>render_template</code> will combine that data with your HTML templates to produce the final, dynamic webpage.</p>
+<h3>Setting Up Your Templates</h3>
+<p>By default, Flask looks for template files in a directory named <code>templates</code> located within your application's <code>root_path</code>. Let's create a <code>templates</code> folder in your project's root and add a simple HTML file, <code>index.html</code>:</p>
+<pre><code class="language-html">&lt;!-- templates/index.html --&gt;
+&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+    &lt;meta charset=&quot;UTF-8&quot;&gt;
+    &lt;title&gt;My Flask App&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;h1&gt;Welcome!&lt;/h1&gt;
+    &lt;p&gt;Hello, {{ name }}!&lt;/p&gt;
+    &lt;p&gt;This is a dynamic page.&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>Now, let's modify our Flask application to use this template:</p>
+<pre><code class="language-python">from flask import Flask, render_template
+
+app = Flask(__name__)
+
+@app.route(&quot;/&quot;)
+def index():
+    # Call render_template, passing 'name' as a keyword argument
+    return render_template(&quot;index.html&quot;, name=&quot;Visitor&quot;)
+
+if __name__ == &quot;__main__&quot;:
+    app.run(debug=True)
+</code></pre>
+<p>Run this code, and when you visit <code>http://127.0.0.1:5000/</code>, you'll see a personalized welcome message.</p>
+<p>Let's break down <code>render_template(&quot;index.html&quot;, name=&quot;Visitor&quot;)</code>:</p>
+<ul>
+<li><code>&quot;index.html&quot;</code>: This is the name of the template file Flask should find and use. Flask's <code>jinja_env</code> (the Jinja2 environment, which is configured on your <code>Flask</code> object) is responsible for locating this file within your <code>templates</code> directory.</li>
+<li><code>name=&quot;Visitor&quot;</code>: This is a keyword argument. Any keyword arguments passed to <code>render_template</code> are made available as variables within the template. In our <code>index.html</code>, <code>{{ name }}</code> is a Jinja2 placeholder that gets replaced by the value of the <code>name</code> variable (in this case, &quot;Visitor&quot;).</li>
+</ul>
+<h3>Integrating Dynamic Data and <code>url_for</code></h3>
+<p>The real power of <code>render_template</code> shines when you combine it with the dynamic data you've learned to access from the <code>Request</code> object and the URL generation capabilities of <code>url_for</code>.</p>
+<p>Let's create another template, <code>user.html</code>, and a view function that uses data from the URL and links to other pages:</p>
+<pre><code class="language-html">&lt;!-- templates/user.html --&gt;
+&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+    &lt;meta charset=&quot;UTF-8&quot;&gt;
+    &lt;title&gt;User Profile&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;h1&gt;User Profile for {{ username }}&lt;/h1&gt;
+    &lt;p&gt;You are viewing the profile of &lt;strong&gt;{{ username }}&lt;/strong&gt;.&lt;/p&gt;
+    &lt;p&gt;User ID: {{ user_id }}&lt;/p&gt;
+    &lt;p&gt;&lt;a href=&quot;{{ url_for('index') }}&quot;&gt;Go to Home&lt;/a&gt;&lt;/p&gt;
+    &lt;p&gt;&lt;a href=&quot;{{ url_for('user_profile', username='Alice', user_id=1) }}&quot;&gt;View Alice's Profile&lt;/a&gt;&lt;/p&gt;
+    &lt;p&gt;&lt;a href=&quot;{{ url_for('user_profile', username='Bob', user_id=2) }}&quot;&gt;View Bob's Profile&lt;/a&gt;&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>And update <code>app.py</code>:</p>
+<pre><code class="language-python">from flask import Flask, render_template, request, url_for
+
+app = Flask(__name__)
+
+@app.route(&quot;/&quot;)
+def index():
+    return render_template(&quot;index.html&quot;, name=&quot;Guest&quot;)
+
+@app.route(&quot;/user/&lt;username&gt;/&lt;int:user_id&gt;&quot;)
+def user_profile(username, user_id):
+    # Pass URL variables and request data to the template
+    return render_template(
+        &quot;user.html&quot;,
+        username=username,
+        user_id=user_id,
+        current_method=request.method # Example of request data
+    )
+
+if __name__ == &quot;__main__&quot;:
+    app.run(debug=True)
+</code></pre>
+<p>In <code>user.html</code>:</p>
+<ul>
+<li>We use <code>{{ username }}</code> and <code>{{ user_id }}</code> to display the data passed from the <code>user_profile</code> view function.</li>
+<li>We use <code>url_for('index')</code> and <code>url_for('user_profile', username='Alice', user_id=1)</code> directly within the template. Jinja2 understands the <code>url_for</code> function because Flask automatically makes it available in the template context. This is much better than hardcoding <code>href=&quot;/user/Alice/1&quot;</code>!</li>
+</ul>
+<h3>The Template Context and Automatic Injections</h3>
+<p>You might be wondering: how is <code>url_for</code> available in the template without explicitly passing it from the view function, like we did with <code>name</code> and <code>user_id</code>?</p>
+<p>This is thanks to Flask's <strong>template context processors</strong>. As part of its <code>AppContext</code> (<a href="05_appcontext.html">Chapter 5: AppContext</a>) management, Flask automatically injects several useful variables and functions into <em>every</em> template's rendering context. These include:</p>
+<ul>
+<li><code>request</code>: The current <code>Request</code> object (<a href="03_request.html">Chapter 3: Request</a>).</li>
+<li><code>session</code>: The <code>Session</code> object (for user-specific data).</li>
+<li><code>g</code>: The global &quot;scratchpad&quot; object for the current request.</li>
+<li><code>current_app.config</code>: The <code>Config</code> object (<a href="02_config.html">Chapter 2: Config</a>) with all your application settings.</li>
+<li><code>url_for</code>: The function for generating URLs (<a href="06_url_for.html">Chapter 6: url_for</a>).</li>
+</ul>
+<p>This automatic injection means you rarely need to explicitly pass these common objects to <code>render_template</code>, keeping your view functions cleaner. You can even define your own custom template context processors to inject additional data into every template. The <code>_default_template_ctx_processor</code> in <code>src/flask/templating.py</code> shows how Flask does this internally.</p>
+<h3>Advanced Usage: Template Lists and Streaming</h3>
+<p><code>render_template</code> has a few more tricks up its sleeve:</p>
+<ol>
+<li>
+<p><strong>Template Name List:</strong> You can pass a list of template names. Flask will try to render the first template in the list that it finds. This is useful for providing fallbacks or specialized templates:</p>
+<pre><code class="language-python">@app.route(&quot;/item/&lt;item_type&gt;&quot;)
+def show_item(item_type):
+    # Tries to render &quot;item_type.html&quot;, then &quot;default_item.html&quot;
+    return render_template([f&quot;{item_type}.html&quot;, &quot;default_item.html&quot;], item_type=item_type)
+</code></pre>
+</li>
+<li>
+<p><strong><code>render_template_string</code>:</strong> For very simple, ad-hoc templates, or for testing purposes, you can render a template directly from a string:</p>
+<pre><code class="language-python">from flask import render_template_string
+
+@app.route(&quot;/inline&quot;)
+def inline_template():
+    template_content = &quot;&lt;h1&gt;Hello from {{ source }}!&lt;/h1&gt;&quot;
+    return render_template_string(template_content, source=&quot;an inline string&quot;)
+</code></pre>
+</li>
+<li>
+<p><strong><code>stream_template</code>:</strong> For very large pages or long-running data generation, sending the entire response at once might be inefficient. <code>stream_template</code> (and <code>stream_template_string</code>) returns an <em>iterator</em> of strings, allowing you to stream the response to the client piece by piece. This is particularly useful when combined with the <code>Response</code> object for streaming HTTP responses, as discussed in <a href="04_response.html">Chapter 4: Response</a>.</p>
+<pre><code class="language-python">from flask import Flask, render_template, Response, stream_template
+import time
+
+app = Flask(__name__)
+
+@app.route(&quot;/stream-data&quot;)
+def stream_data():
+    def generate_items():
+        yield &quot;&lt;h2&gt;Starting Stream...&lt;/h2&gt;&quot;
+        for i in range(5):
+            time.sleep(1) # Simulate delay
+            yield f&quot;&lt;p&gt;Item {i}&lt;/p&gt;&quot;
+        yield &quot;&lt;h2&gt;Stream Finished!&lt;/h2&gt;&quot;
+    # Render a base template, but the content will be streamed
+    return Response(stream_template(&quot;stream_base.html&quot;, data_generator=generate_items()))
+
+# Assuming templates/stream_base.html looks something like:
+# &lt;body&gt;
+#   &lt;h1&gt;Streamed Content&lt;/h1&gt;
+#   {% for item in data_generator() %}
+#     {{ item | safe }}
+#   {% endfor %}
+# &lt;/body&gt;
+</code></pre>
+<p>Note the <code>| safe</code> filter in Jinja to prevent HTML escaping if the generated items already contain HTML. The <code>stream_with_context</code> helper (<a href="04_response.html">Chapter 4: Response</a> also mentions it) ensures that the <code>AppContext</code> is preserved for the generator.</p>
+</li>
+</ol>
+<h3><code>render_template</code> and the AppContext</h3>
+<p>Like <code>url_for</code>, <code>render_template</code> depends heavily on the <code>AppContext</code>. As we learned in <a href="05_appcontext.html">Chapter 5: AppContext</a>, this context is a temporary &quot;workbench&quot; that makes <code>current_app</code> readily available. <code>render_template</code> uses <code>current_app.jinja_env</code> to access the configured Jinja2 environment and load templates. Without an active application context, Flask wouldn't know which application's templates to use, leading to a <code>RuntimeError</code>.</p>
+<pre class="mermaid">sequenceDiagram
+    participant V as View Function
+    participant F as Flask App
+    participant AC as AppContext
+    participant JE as Jinja Env
+    participant HT as HTML Template
+    participant R as Response
+
+    V->AC: Calls render_template("template.html", data=value)
+    AC->F: Delegates to current_app's Jinja environment
+    F->JE: Gets or selects template by name
+    JE->HT: Loads and parses template from disk
+    HT->JE: Renders template with data and context
+    JE-->AC: Returns rendered HTML string
+    AC->F: Converts HTML string to Response object
+    F->R: Sends HTTP response (HTML content)
+</pre>
+<ol>
+<li>The <strong>View Function</strong> calls <code>render_template</code>, passing the template file name and dynamic data.</li>
+<li>Flask ensures an <strong>AppContext</strong> is active, making <code>current_app</code> available.</li>
+<li><code>render_template</code> uses <code>current_app.jinja_env</code> to delegate the template loading and rendering to the <strong>Jinja Environment</strong>.</li>
+<li>The <strong>Jinja Environment</strong> locates and reads the <strong>HTML Template</strong> file.</li>
+<li>It then processes the template, replacing <code>{{ variables }}</code> with the provided data and executing <code>{% logic %}</code>. Crucially, it also automatically injects values from <code>request</code>, <code>session</code>, <code>g</code>, and <code>url_for</code> into the template's rendering scope.</li>
+<li>The rendered HTML string is returned.</li>
+<li>Flask (as seen in <a href="04_response.html">Chapter 4: Response</a>) takes this HTML string and wraps it into a proper <strong>Response</strong> object.</li>
+<li>This response is sent back to the client.</li>
+</ol>
+<p>By mastering <code>render_template</code>, you gain the ability to create dynamic, data-driven, and visually appealing web pages that form the user interface of your Flask application. It's the essential bridge between your Python logic and the user's browser.</p>
+<p>But what if your application grows to have dozens or hundreds of routes and templates? How do you organize this complexity into manageable, reusable pieces without creating a monolithic, tangled mess? That's the challenge that Flask's <strong>Blueprints</strong> solve, and we'll explore them in the next chapter.</p>
+<p>Go to <a href="08_blueprint.html">Blueprint</a></p>
+
+  <nav class="chapter-nav">
+    <span><a href="06_url_for.html">&larr; url_for</a></span>
+    <span><a href="08_blueprint.html">Blueprint &rarr;</a></span>
+  </nav>
+</body>
+</html>

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Router — express</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; express tour</a></p>
+<h1>Chapter 5: Router</h1>
+<p>In <a href="01_app.html">Chapter 1: app</a>, we learned that the <code>app</code> instance is the main switchboard operator, receiving all incoming calls (HTTP requests). We also saw how <code>app.get()</code>, <code>app.post()</code>, and similar methods allow the <code>app</code> to direct specific calls (requests to certain URLs and HTTP methods) to their respective handler functions. This works well for small applications, but what happens when your web application grows, handling dozens or even hundreds of different types of requests?</p>
+<p>Imagine our postal sorting office analogy. The main <code>app</code> is the central post office. Initially, it sorts all letters directly: &quot;Letters for Paris go here,&quot; &quot;Letters for Berlin go there.&quot; This is manageable when you only handle a few cities. But as the volume and complexity of mail increase, with packages, international mail, express delivery, and so on, it becomes inefficient and chaotic for one central office to manage every single detail. It would become a single, massive sorting hall.</p>
+<p>This is the problem the <code>Router</code> in Express.js solves. A <code>Router</code> is like a <strong>specialized departmental sorting office</strong> within the larger postal system. Instead of the main post office sorting every single letter itself, it can say: &quot;All mail for the 'Customer Support' department, send it to the Customer Support Sorting Office. All mail for 'Product Orders,' send it to the Product Orders Sorting Office.&quot; Each specialized sorting office then has its own, internal rules for sorting and handling its specific type of mail. This keeps your application organized, scalable, and much easier to manage.</p>
+<h3>Creating a Specialized Sorting Office: <code>express.Router()</code></h3>
+<p>To create one of these specialized sorting offices, you use <code>express.Router()</code>. This creates a completely isolated instance of a router, a mini-application that can handle requests and middleware just like the main <code>app</code>.</p>
+<pre><code class="language-javascript">const express = require('express');
+const router = express.Router(); // This is your specialized sorting office!
+</code></pre>
+<p>This <code>router</code> object can define its own routes (using <code>router.get()</code>, <code>router.post()</code>, etc.) and its own middleware (using <code>router.use()</code>).</p>
+<h3>Delegating Mail: Modularizing Routes</h3>
+<p>Let's say your application has user-related routes (like <code>/users</code>, <code>/users/:id</code>) and product-related routes (like <code>/products</code>, <code>/products/:id</code>). Instead of putting all of them directly on the <code>app</code> instance in your main file, you can create separate router files for each feature.</p>
+<p><strong>1. Create <code>users.js</code> for User Routes:</strong></p>
+<p>In a new file (e.g., <code>routes/users.js</code>):</p>
+<pre><code class="language-javascript">// routes/users.js
+const express = require('express');
+const router = express.Router(); // Create a new router instance
+
+// Middleware specific to this router
+router.use((req, res, next) =&gt; {
+  console.log('Time for user route:', Date.now());
+  next();
+});
+
+// Define routes relative to this router
+router.get('/', (req, res) =&gt; {
+  res.send('List of users');
+});
+
+router.get('/:id', (req, res) =&gt; {
+  // Access path parameter from req.params as we learned in Chapter 2: req
+  res.send(`Details for user ${req.params.id}`);
+});
+
+router.post('/', (req, res) =&gt; {
+  res.send('Create a new user');
+});
+
+module.exports = router; // Export the router
+</code></pre>
+<p><strong>2. Integrate into Your Main Application:</strong></p>
+<p>Now, in your main application file (e.g., <code>app.js</code> or <code>index.js</code>), you import and &quot;mount&quot; this specialized router onto a specific base path using <code>app.use()</code>.</p>
+<pre><code class="language-javascript">// app.js
+const express = require('express');
+const app = express();
+const usersRoutes = require('./routes/users'); // Import our specialized router
+
+// Mount the user router at the /users base path
+app.use('/users', usersRoutes);
+
+// Other general routes
+app.get('/', (req, res) =&gt; {
+  res.send('Welcome to the homepage!');
+});
+
+app.listen(3000, () =&gt; console.log('Server running on port 3000'));
+</code></pre>
+<p>Now, when a request comes in for <code>http://localhost:3000/users</code> or <code>http://localhost:3000/users/123</code>, the <code>app</code> (main post office) sees the <code>/users</code> prefix and delegates the request to <code>usersRoutes</code> (the specialized user sorting office). The <code>usersRoutes</code> then handles the rest of the path (<code>/</code> or <code>/:id</code>) and its own middleware.</p>
+<p>Notice how the paths defined in <code>users.js</code> (<code>/</code> and <code>/:id</code>) are relative to the path where the router is mounted (<code>/users</code>). So <code>router.get('/')</code> effectively becomes <code>GET /users</code>, and <code>router.get('/:id')</code> becomes <code>GET /users/:id</code>.</p>
+<h3>Router as Mountable Middleware</h3>
+<p>As seen in the example above, a <code>Router</code> instance is essentially a type of middleware itself. When you use <code>app.use('/users', usersRoutes)</code>, you are telling Express: &quot;For any request that starts with <code>/users</code>, apply the <code>usersRoutes</code> middleware (which is our router) to handle it.&quot;</p>
+<p>This means that any middleware you define <em>on the router</em> (like <code>router.use((req, res, next) =&gt; { ... });</code> in <code>users.js</code>) will <em>only</em> run for requests that hit that mounted router's path. This is incredibly powerful for applying specific logic, such as authentication, logging, or data validation, only to relevant parts of your application, building upon what we learned in <a href="04_middleware.html">Chapter 4: Middleware</a>.</p>
+<p>For instance, you could have a separate <code>adminRoutes.js</code> file with a specific authentication middleware applied to it:</p>
+<pre><code class="language-javascript">// routes/admin.js
+const express = require('express');
+const adminRouter = express.Router();
+
+// Middleware specific to admin routes for authentication
+adminRouter.use((req, res, next) =&gt; {
+  if (req.headers.authorization === 'Bearer ADMIN_TOKEN') {
+    console.log('Admin authenticated!');
+    next(); // Authorized, pass to next handler
+  } else {
+    res.status(403).send('Forbidden: Admin access required.'); // Not authorized, terminate response
+  }
+});
+
+adminRouter.get('/dashboard', (req, res) =&gt; {
+  res.send('Welcome to the Admin Dashboard!');
+});
+
+module.exports = adminRouter;
+</code></pre>
+<p>Then in <code>app.js</code>:</p>
+<pre><code class="language-javascript">// app.js (continued)
+const adminRoutes = require('./routes/admin');
+app.use('/admin', adminRoutes); // Mount admin router
+// ... rest of app.js
+</code></pre>
+<p>Now, only requests to <code>/admin</code> paths will go through the <code>adminRouter.use()</code> authentication middleware. Requests to <code>/users</code> or <code>/</code> will not.</p>
+<h3>Understanding <code>req.baseUrl</code> and <code>req.originalUrl</code></h3>
+<p>When a request is delegated to a router, the <code>req</code> object (from <a href="02_req.html">Chapter 2: req</a>) still holds all the original request details. However, Express adds a couple of helpful properties to <code>req</code> to give context within the mounted router:</p>
+<ul>
+<li><code>req.baseUrl</code>: The URL path on which the router was mounted. In our <code>/users</code> example, inside <code>usersRoutes</code>, <code>req.baseUrl</code> would be <code>'/users'</code>.</li>
+<li><code>req.originalUrl</code>: The full URL path of the incoming request, unchanged. For <code>http://localhost:3000/users/123?param=foo</code>, <code>req.originalUrl</code> would be <code>'/users/123?param=foo'</code>.</li>
+</ul>
+<p>This is like knowing which specialized sorting office the letter arrived at (<code>req.baseUrl</code>) versus the full original address on the envelope (<code>req.originalUrl</code>).</p>
+<h3>How Requests Flow with Routers</h3>
+<p>Here's a simplified view of how a request moves through your <code>app</code> and a mounted <code>Router</code>:</p>
+<pre class="mermaid">sequenceDiagram
+    participant User as User Browser
+    participant App as Main Express App
+    participant UsersRouter as Users Router
+    participant UserHandler as User Handler
+
+    User->>App: GET /users/123
+    App->>App: Global Middleware (e.g., logging)
+    App->>UsersRouter: Delegate /users path
+    UsersRouter->>UsersRouter: Router-specific middleware
+    UsersRouter->>UserHandler: Match /:id route
+    UserHandler->>App: Send response (res.send)
+    App->>User: HTTP Response
+</pre>
+<p>As you can see, the <code>App</code> acts as the initial gatekeeper, directing specific types of requests to the appropriate <code>UsersRouter</code>. The <code>UsersRouter</code> then takes over, applies its own rules, and finds the final <code>UserHandler</code>.</p>
+<h3>Conclusion</h3>
+<p>The <code>Router</code> is your key to building modular, organized, and maintainable Express.js applications. By breaking down your application's routes and middleware into specialized, mountable units, you avoid a chaotic single file, making your codebase easier to understand, test, and scale. It transforms your single, central switchboard into a well-structured organization with clear lines of responsibility for different types of customer inquiries.</p>
+<p>Now that you understand how to organize your routes using <code>Router</code> instances, you might be curious about an even finer level of control: defining multiple HTTP methods for a <em>single</em> path. How do you handle <code>GET</code>, <code>POST</code>, <code>PUT</code>, and <code>DELETE</code> requests for the <em>exact same</em> URL in a clean and readable way? That's where the concept of <code>Route</code> comes in, which we'll explore in the next chapter!</p>
+
+  <nav class="chapter-nav">
+    <span><a href="04_middleware.html">&larr; Middleware</a></span>
+    <span><a href="06_route.html">Route &rarr;</a></span>
+  </nav>
+</body>
+</html>

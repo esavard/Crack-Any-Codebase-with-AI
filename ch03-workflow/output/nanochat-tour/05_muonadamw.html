@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MuonAdamW — nanochat</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; nanochat tour</a></p>
+<h1>Chapter 5: MuonAdamW</h1>
+<p>In the previous chapters, we've brought our <code>nanochat</code> model to life: the <a href="01_tokenizer.html">Tokenizer</a> translates human text into numbers, the <a href="02_gpt.html">GPT</a> model processes these numbers using efficient <code>COMPUTE_DTYPE</code> (Chapter 3), and the <a href="04_dataloader.html">DataLoader</a> ensures a continuous, optimized stream of data. But the GPT model, with its billions of connections (called &quot;weights&quot; or &quot;parameters&quot;), doesn't inherently know how to be a good conversationalist or a smart problem-solver. It starts as a blank slate, making mostly random predictions.</p>
+<p>So, how does <code>nanochat</code>'s GPT model actually <em>learn</em>? How does it adjust those millions of connections based on its performance, getting smarter and faster with each new piece of data it sees? This is the critical role of the <strong>optimizer</strong>, and in <code>nanochat</code>, that advanced optimization algorithm is called <strong>MuonAdamW</strong>.</p>
+<p>Think of MuonAdamW as the model's expert coach. After each practice session (a batch of data), the model performs some actions (makes predictions), and a scorekeeper (the loss function) tells the coach how well it did (the &quot;loss&quot;). The coach then analyzes this feedback (the &quot;gradients,&quot; which tell us the direction and magnitude of error for each connection) and meticulously adjusts every single connection in the network. This isn't a simple adjustment; it's a sophisticated, multi-faceted strategy to ensure the model improves efficiently and robustly.</p>
+<pre class="mermaid">sequenceDiagram
+    participant G as GPT Model
+    participant L as Loss Function
+    participant GR as Gradients
+    participant O as MuonAdamW
+    participant UP as Updated Parameters
+
+    G->>L: 'Predict next token' (Logits)
+    L->>GR: 'How wrong?' (Gradients)
+    GR->>O: 'Adjust weights!' (Gradients)
+    O->>G: 'Weights adjusted' (Updated Parameters)
+    G-->>G: Continues learning
+</pre>
+<p>The core implementation of <code>nanochat</code>'s optimizer is found in <code>nanochat/optim.py</code>. It combines two powerful optimization techniques: AdamW and Muon.</p>
+<h3>The Foundation: AdamW</h3>
+<p>Before diving into MuonAdamW, let's briefly understand AdamW, which is a widely used and highly effective optimization algorithm. AdamW stands for &quot;Adaptive Moment Estimation with Weight Decay.&quot; It works like a smart coach that:</p>
+<ol>
+<li><strong>Remembers Past Moves (Moments):</strong> For each parameter, it keeps track of the average of past gradients (first moment, <code>exp_avg</code>) and the average of past squared gradients (second moment, <code>exp_avg_sq</code>). This helps it understand the general direction and consistency of parameter updates.</li>
+<li><strong>Adapts Learning Rates:</strong> By using these moments, AdamW can give different parameters their own &quot;learning speeds.&quot; Parameters with consistently high gradients might get larger steps, while those with noisy or sparse gradients get smaller, more cautious steps.</li>
+<li><strong>Decoupled Weight Decay:</strong> Unlike traditional Adam, AdamW separates weight decay (a technique to prevent overfitting by gently pushing weights towards zero) from the adaptive learning rate update. This has been shown to improve generalization.</li>
+</ol>
+<p>In <code>nanochat</code>, the AdamW step is highly optimized using a &quot;fused kernel&quot; (a single GPU operation combining multiple steps) for speed:</p>
+<pre><code class="language-python"># nanochat/optim.py
+
+@torch.compile(dynamic=False, fullgraph=True)
+def adamw_step_fused(
+    p: Tensor,              # parameter tensor
+    grad: Tensor,           # gradient, same shape as p
+    exp_avg: Tensor,        # first moment, same shape as p
+    exp_avg_sq: Tensor,     # second moment, same shape as p
+    step_t: Tensor,         # step count
+    lr_t: Tensor,           # learning rate
+    beta1_t: Tensor,        # beta1
+    beta2_t: Tensor,        # beta2
+    eps_t: Tensor,          # epsilon
+    wd_t: Tensor,           # weight decay
+) -&gt; None:
+    &quot;&quot;&quot;
+    Fused AdamW step: weight_decay -&gt; momentum_update -&gt; bias_correction -&gt; param_update
+    All in one compiled graph to eliminate Python overhead between ops.
+    &quot;&quot;&quot;
+    # 1. Apply weight decay
+    p.mul_(1 - lr_t * wd_t)
+    # 2. Update running averages (first and second moments)
+    exp_avg.lerp_(grad, 1 - beta1_t)
+    exp_avg_sq.lerp_(grad.square(), 1 - beta2_t)
+    # 3. Bias corrections for the moments
+    bias1 = 1 - beta1_t ** step_t
+    bias2 = 1 - beta2_t ** step_t
+    # 4. Compute update and apply to parameter
+    denom = (exp_avg_sq / bias2).sqrt() + eps_t
+    step_size = lr_t / bias1
+    p.add_(exp_avg / denom, alpha=-step_size)
+</code></pre>
+<p>This <code>adamw_step_fused</code> function efficiently updates a single parameter <code>p</code> using its gradient <code>grad</code> and the optimizer's internal state.</p>
+<h3>The Specialized Approach: Muon</h3>
+<p>While AdamW is great for general-purpose parameters, the vast majority of parameters in a Transformer model are found in large 2D matrices (the weights of the <code>Linear</code> layers in the <a href="02_gpt.html">GPT</a> blocks). Updating these matrices optimally is crucial. This is where <strong>Muon</strong> comes in.</p>
+<p>Muon, short for &quot;Momentum Orthogonalized by Newton-schulz,&quot; is an optimizer specifically designed for these high-dimensional matrix parameters. Imagine you're trying to sculpt a perfect sphere. AdamW might chip away at it from all angles, making progress, but potentially introducing subtle unevenness. Muon, on the other hand, is like a sculptor who, after each chip, carefully re-evaluates the entire surface to ensure it remains perfectly round (orthogonal).</p>
+<p>The core ideas behind Muon (as implemented in <code>nanochat</code>):</p>
+<ol>
+<li><strong>Nesterov Momentum:</strong> It first calculates a &quot;look-ahead&quot; gradient (Nesterov momentum), which often leads to more stable and faster convergence.</li>
+<li><strong>Polar Express Orthogonalization:</strong> This is the heart of Muon. It takes the momentum-adjusted gradient matrix and &quot;orthogonalizes&quot; it. In simpler terms, it finds an update direction that is &quot;well-behaved&quot; and prevents matrix updates from introducing undesirable distortions that can hurt training stability. This is done via an iterative process (like Newton-Schulz iteration or the Polar Express Sign Method), which aims to make the update matrix as close to an orthogonal matrix as possible.</li>
+<li><strong>Variance Reduction (NorMuon):</strong> After orthogonalization, Muon applies a per-neuron/column adaptive learning rate (NorMuon) that normalizes update scales. This ensures that different parts of the matrix update with appropriate intensities, preventing some neurons from becoming overly active or inactive.</li>
+<li><strong>Cautious Weight Decay:</strong> Finally, a careful weight decay is applied, but only to parameters whose updates move them in the same direction as the decay.</li>
+</ol>
+<p>Similar to AdamW, Muon's steps are combined into a single fused kernel for maximum efficiency:</p>
+<pre><code class="language-python"># nanochat/optim.py
+
+@torch.compile(dynamic=False, fullgraph=True)
+def muon_step_fused(
+    stacked_grads: Tensor,          # stacked gradients for multiple parameters
+    stacked_params: Tensor,         # stacked parameters
+    momentum_buffer: Tensor,        # first moment buffer
+    second_momentum_buffer: Tensor, # factored second moment buffer
+    momentum_t: Tensor,             # momentum coefficient
+    lr_t: Tensor,                   # learning rate
+    wd_t: Tensor,                   # weight decay
+    beta2_t: Tensor,                # beta2 for second moment
+    ns_steps: int,                  # number of Polar Express iterations
+    red_dim: int,                   # reduction dimension for variance
+) -&gt; None:
+    &quot;&quot;&quot;
+    Fused Muon step: momentum -&gt; polar_express -&gt; variance_reduction -&gt; cautious_update
+    &quot;&quot;&quot;
+
+    # 1. Nesterov momentum: calculate a look-ahead gradient
+    momentum = momentum_t.to(stacked_grads.dtype)
+    momentum_buffer.lerp_(stacked_grads, 1 - momentum)
+    g = stacked_grads.lerp_(momentum_buffer, momentum)
+
+    # 2. Polar Express: orthogonalize the gradient update (X becomes the orthogonalized gradient)
+    X = g.bfloat16() if COMPUTE_DTYPE == torch.bfloat16 else g # Cast for speed
+    # Normalize X to prevent explosion during iterations
+    X = X / (X.norm(dim=(-2, -1), keepdim=True) * 1.01 + 1e-6)
+    if g.size(-2) &gt; g.size(-1): # Tall matrix
+        for a, b, c in polar_express_coeffs[:ns_steps]:
+            A = X.mT @ X
+            B = b * A + c * (A @ A)
+            X = a * X + X @ B
+    else: # Wide matrix
+        for a, b, c in polar_express_coeffs[:ns_steps]:
+            A = X @ X.mT
+            B = b * A + c * (A @ A)
+            X = a * X + B @ X
+    g = X # g now holds the orthogonalized gradient update
+
+    # 3. Variance reduction (NorMuon): adaptively scale updates per neuron
+    beta2 = beta2_t.to(g.dtype)
+    v_mean = g.float().square().mean(dim=red_dim, keepdim=True)
+    # ... (more calculations to compute final_scale)
+    g = g * final_scale.to(g.dtype)
+
+    # 4. Cautious weight decay + parameter update
+    lr = lr_t.to(g.dtype)
+    wd = wd_t.to(g.dtype)
+    mask = (g * stacked_params) &gt;= 0 # apply decay only if update and param have same sign
+    stacked_params.sub_(lr * g + lr * wd * stacked_params * mask)
+</code></pre>
+<p>Notice that Muon operates on <code>stacked_grads</code> and <code>stacked_params</code>. This means that multiple parameters of the same shape (e.g., all <code>c_q</code> weights from different attention heads) are grouped together and processed in a single, efficient batch operation on the GPU. This is a significant optimization.</p>
+<h3><code>nanochat</code>'s Combined Optimizer: MuonAdamW</h3>
+<p><code>nanochat</code> intelligently combines these two strategies in its <code>MuonAdamW</code> optimizer. It uses:</p>
+<ul>
+<li><strong>Muon</strong> for the large 2D matrix parameters (like <code>c_q</code>, <code>c_k</code>, <code>c_v</code>, <code>c_proj</code> in the attention heads, and the <code>c_fc</code>, <code>c_proj</code> in the MLP layers) that form the bulk of the Transformer model. These benefit most from Muon's specialized matrix updates.</li>
+<li><strong>AdamW</strong> for all other parameters, such as token embeddings (<code>wte</code>), value embeddings (<code>value_embeds</code>), the language model head (<code>lm_head</code>), and various scalar parameters (<code>resid_lambdas</code>, <code>x0_lambdas</code>, <code>smear_lambda</code>, <code>smear_gate</code>, <code>backout_lambda</code>). These are typically lower-dimensional or require different adaptive learning behaviors, for which AdamW is well-suited.</li>
+</ul>
+<p>This hybrid approach, <code>MuonAdamW</code>, allows <code>nanochat</code> to leverage the strengths of both optimizers, ensuring efficient and stable training across all parts of the model.</p>
+<p>The <code>GPT</code> module itself contains the <code>setup_optimizer</code> method, which classifies all parameters into these groups and configures the <code>MuonAdamW</code> optimizer:</p>
+<pre><code class="language-python"># nanochat/gpt.py
+
+class GPT(nn.Module):
+    # ...
+    def setup_optimizer(self, unembedding_lr=0.004, embedding_lr=0.2, matrix_lr=0.02, weight_decay=0.0, scalar_lr=0.5):
+        # Separate out all parameters into groups (matrix_params, embedding_params, etc.)
+        matrix_params = list(self.transformer.h.parameters())
+        value_embeds_params = list(self.value_embeds.parameters())
+        embedding_params = list(self.transformer.wte.parameters())
+        lm_head_params = list(self.lm_head.parameters())
+        resid_params = [self.resid_lambdas]
+        x0_params = [self.x0_lambdas]
+        smear_params = [self.smear_gate.weight, self.smear_lambda, self.backout_lambda]
+        # ... (further LR scaling based on model dimension)
+
+        param_groups = [
+            # AdamW groups
+            dict(kind='adamw', params=lm_head_params, lr=unembedding_lr * dmodel_lr_scale, betas=(0.8, 0.96), eps=1e-10, weight_decay=0.01),
+            dict(kind='adamw', params=embedding_params, lr=embedding_lr * dmodel_lr_scale, betas=(0.8, 0.995), eps=1e-10, weight_decay=0.001),
+            dict(kind='adamw', params=value_embeds_params, lr=embedding_lr * dmodel_lr_scale * 0.5, betas=(0.8, 0.995), eps=1e-10, weight_decay=0.01),
+            dict(kind='adamw', params=resid_params, lr=scalar_lr * 0.01, betas=(0.8, 0.95), eps=1e-10, weight_decay=0.05),
+            dict(kind='adamw', params=x0_params, lr=scalar_lr, betas=(0.96, 0.95), eps=1e-10, weight_decay=0.0),
+            dict(kind='adamw', params=smear_params, lr=0.2, betas=(0.8, 0.95), eps=1e-10, weight_decay=0.0),
+        ]
+        # Muon groups (grouped by shape for stacking)
+        for shape in sorted({p.shape for p in matrix_params}):
+            group_params = [p for p in matrix_params if p.shape == shape]
+            param_groups.append(dict(
+                kind='muon', params=group_params, lr=matrix_lr,
+                momentum=0.95, ns_steps=5, beta2=0.9, weight_decay=weight_decay,
+            ))
+
+        Factory = DistMuonAdamW if ddp else MuonAdamW
+        optimizer = Factory(param_groups)
+        # ... (store initial LRs)
+        return optimizer
+</code></pre>
+<h3>Distributed Training with <code>DistMuonAdamW</code></h3>
+<p>For training on multiple GPUs, <code>nanochat</code> uses <code>DistMuonAdamW</code>, a distributed version of the optimizer. This version implements a strategy similar to ZeRO-2, where the optimizer state (like momentum buffers) is sharded across GPUs. Each GPU is only responsible for updating a portion of the model's parameters and storing their corresponding optimizer states.</p>
+<p><code>DistMuonAdamW</code> uses a clever 3-phase asynchronous communication pattern to maximize overlap between computation and data transfer:</p>
+<ol>
+<li><strong>Phase 1: Launch Async Reduce Ops:</strong> Gradients are computed, and then either <code>all_reduce</code> (for small parameters) or <code>reduce_scatter</code> (for large parameters and Muon groups) operations are launched asynchronously. This means the gradients are sent to other GPUs for aggregation and sharding in the background while the GPU can start other work.</li>
+<li><strong>Phase 2: Wait for Reduces, Compute Updates, Launch Gathers:</strong> Each GPU waits for its incoming gradient slices, computes the parameter updates for the portions of the model it &quot;owns,&quot; and then launches <code>all_gather</code> operations to share these updated parameters with all other GPUs. Again, these are asynchronous.</li>
+<li><strong>Phase 3: Wait for Gathers, Copy Back:</strong> Finally, all GPUs wait for the <code>all_gather</code> operations to complete, ensuring everyone has the full, updated set of parameters before the next training step.</li>
+</ol>
+<p>This intricate dance of computation and communication allows <code>nanochat</code> to scale efficiently across multiple GPUs, making large-scale LLM training feasible. The <code>scripts/base_train.py</code> and <code>scripts/chat_sft.py</code> scripts are where this optimizer is instantiated and used to drive the learning process.</p>
+<p>By carefully tuning each parameter group and orchestrating distributed communication, MuonAdamW is <code>nanochat</code>'s engine for efficient and effective learning, transforming a randomly initialized network into a capable language model.</p>
+<p>But what happens to all these learned weights and the optimizer's state when training needs to pause, or when we want to use the trained model later? How does <code>nanochat</code> save and load its entire &quot;brain&quot; to continue learning or to be deployed for inference? That's the crucial role of the <code>CheckpointManager</code>, which we'll explore in the next chapter.</p>
+
+  <nav class="chapter-nav">
+    <span><a href="04_dataloader.html">&larr; DataLoader</a></span>
+    <span><a href="06_checkpointmanager.html">CheckpointManager &rarr;</a></span>
+  </nav>
+</body>
+</html>

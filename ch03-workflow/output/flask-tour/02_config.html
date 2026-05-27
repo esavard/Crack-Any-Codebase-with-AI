@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Config — flask</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; flask tour</a></p>
+<h1>Chapter 2: Config</h1>
+<p>In the previous chapter, we met the <code>Flask</code> object, the central manager of our web application. We saw it orchestrating requests, routing them to the right functions, and sending back responses. Remember that last line in our first Flask app?</p>
+<pre><code class="language-python">if __name__ == &quot;__main__&quot;:
+    app.run(debug=True)
+</code></pre>
+<p>We set <code>debug=True</code>, which instantly unlocked helpful features like an interactive debugger and automatic code reloading. But how did the <code>Flask</code> object know what <code>debug=True</code> meant? What other settings can we adjust? How does our application learn about its database connection, the location of user-uploaded files, or its &quot;secret password&quot; for security features?</p>
+<p>Just as a restaurant manager has a set of policies, menus, and operational guidelines, your Flask application needs a central place to store all its settings. This &quot;control panel&quot; is where you define how your entire Flask website should behave, customizing its features and behavior. This is the role of Flask's <code>Config</code> object.</p>
+<p>The <code>Config</code> object is a special dictionary-like object attached directly to your Flask application as <code>app.config</code>. It's a key-value store where you can keep all the adjustable parameters for your application. It’s the manager's clipboard, holding all the current operational notes.</p>
+<p>Let's see it in action by examining the <code>debug</code> setting we used earlier.</p>
+<pre><code class="language-python">from flask import Flask
+
+app = Flask(__name__)
+
+# Accessing the debug setting directly from app.config
+print(f&quot;Debug mode from config: {app.config['DEBUG']}&quot;)
+
+# Running the app with debug=True explicitly sets this in the config
+if __name__ == &quot;__main__&quot;:
+    app.run(debug=True)
+</code></pre>
+<p>When you run this, you'll see that <code>app.config['DEBUG']</code> is <code>True</code>. Flask automatically populates the <code>Config</code> with default values and allows you to override them.</p>
+<h3>Default Configuration</h3>
+<p>Flask comes with a set of sensible default settings. These are built into the <code>Flask</code> object itself. For instance, in <code>src/flask/sansio/app.py</code>, you'll find a <code>default_config</code> attribute which is a dictionary of standard settings like:</p>
+<ul>
+<li><code>TESTING</code>: <code>False</code> (for production)</li>
+<li><code>SECRET_KEY</code>: <code>None</code> (must be set for secure sessions)</li>
+<li><code>PERMANENT_SESSION_LIFETIME</code>: <code>timedelta(days=31)</code> (how long a &quot;remember me&quot; session lasts)</li>
+<li><code>SESSION_COOKIE_NAME</code>: <code>'session'</code></li>
+<li><code>MAX_CONTENT_LENGTH</code>: <code>None</code> (maximum size for uploaded files)</li>
+</ul>
+<p>These defaults ensure your application has a baseline behavior, but you'll often need to customize them.</p>
+<h3>Customizing Configuration</h3>
+<p>There are several ways to load and manage configuration in Flask, ranging from simple direct assignment to loading from files or environment variables.</p>
+<h4>1. Direct Assignment</h4>
+<p>You can set or modify configuration values just like with a regular Python dictionary:</p>
+<pre><code class="language-python">from flask import Flask
+
+app = Flask(__name__)
+
+# Override the default session cookie name
+app.config['SESSION_COOKIE_NAME'] = 'my_app_session'
+
+# Set a custom upload folder path
+app.config['UPLOAD_FOLDER'] = '/path/to/my/uploads'
+
+# Directly set the secret key (for development only!)
+app.config['SECRET_KEY'] = 'dev-secret-key-please-change'
+</code></pre>
+<p>While simple, direct assignment is often best for small, temporary tweaks or during initial setup. For more complex or environment-specific settings, other methods are preferred.</p>
+<h4>2. From Python Files (<code>from_pyfile</code>)</h4>
+<p>A common and recommended way to manage configuration is by storing settings in a separate Python file. This allows for clear separation of concerns, easy commenting, and version control.</p>
+<p>First, create a <code>config.py</code> (or any <code>.py</code> file) in your project's root directory:</p>
+<pre><code class="language-python"># config.py
+DEBUG = False
+SECRET_KEY = 'YOUR_SECRET_KEY_HERE'
+DATABASE_URI = 'sqlite:///your_database.db'
+UPLOAD_FOLDER = 'uploads'
+</code></pre>
+<p>Then, load this file into your application:</p>
+<pre><code class="language-python"># app.py
+from flask import Flask
+
+app = Flask(__name__)
+
+# Load configuration from config.py relative to the app's root path
+# The 'silent=True' argument means it won't raise an error if the file is missing
+app.config.from_pyfile('config.py', silent=True)
+
+# You can now access these settings
+print(f&quot;Database URI: {app.config['DATABASE_URI']}&quot;)
+print(f&quot;Uploads go to: {app.config['UPLOAD_FOLDER']}&quot;)
+</code></pre>
+<p>Notice that only uppercase variables from <code>config.py</code> are loaded into <code>app.config</code>. This convention allows you to include other variables in your config file without them becoming part of the application's configuration.</p>
+<h4>3. From Python Objects (<code>from_object</code>)</h4>
+<p>This method is particularly useful for managing different configurations based on the environment (development, testing, production). You can define different configuration classes and load the appropriate one.</p>
+<pre><code class="language-python"># config_environments.py
+class DevelopmentConfig:
+    DEBUG = True
+    SECRET_KEY = 'dev-key'
+    DATABASE_URI = 'sqlite:///dev.db'
+
+class ProductionConfig:
+    DEBUG = False
+    SECRET_KEY = 'VERY_SECRET_PRODUCTION_KEY' # MUST be strong and unique
+    DATABASE_URI = 'postgresql://user:password@host/prod_db'
+    SESSION_COOKIE_SECURE = True # Only send cookies over HTTPS
+
+class TestingConfig:
+    TESTING = True
+    SECRET_KEY = 'test-key'
+    DATABASE_URI = 'sqlite:///:memory:' # In-memory database for tests
+</code></pre>
+<p>To use this:</p>
+<pre><code class="language-python"># app.py
+from flask import Flask
+import os
+
+app = Flask(__name__)
+
+# Load a default configuration (e.g., from a development config class)
+app.config.from_object('config_environments.DevelopmentConfig')
+
+# You can override this based on an environment variable
+# For example, in your terminal: export FLASK_ENV='Production'
+flask_env = os.environ.get('FLASK_ENV')
+
+if flask_env == 'Production':
+    app.config.from_object('config_environments.ProductionConfig')
+elif flask_env == 'Testing':
+    app.config.from_object('config_environments.TestingConfig')
+
+print(f&quot;Current environment's DEBUG setting: {app.config['DEBUG']}&quot;)
+</code></pre>
+<p>When using <code>from_object</code>, Flask loads any uppercase attribute from the given object. This makes it a powerful way to switch between comprehensive configurations.</p>
+<h4>4. From Environment Variables (<code>from_envvar</code> and <code>from_prefixed_env</code>)</h4>
+<p>Storing sensitive information like API keys or production database credentials directly in code or even config files can be risky. Environment variables provide a secure way to inject these settings without exposing them in your codebase.</p>
+<ul>
+<li>
+<p><strong><code>from_envvar</code></strong>: Loads a Python config file whose path is specified by an environment variable.</p>
+<pre><code class="language-bash"># In your terminal, before running the app
+export MYAPP_SETTINGS='/etc/myapp/prod_config.py'
+</code></pre>
+<pre><code class="language-python"># app.py
+from flask import Flask
+
+app = Flask(__name__)
+app.config.from_envvar('MYAPP_SETTINGS', silent=False) # silent=False will raise an error if env var not set
+</code></pre>
+</li>
+<li>
+<p><strong><code>from_prefixed_env</code></strong>: This is a more modern and flexible way, especially for containerized applications. It automatically loads any environment variables that start with a specified prefix (e.g., <code>FLASK_</code>).</p>
+<pre><code class="language-bash"># In your terminal
+export FLASK_DEBUG=true
+export FLASK_DATABASE_HOST=mydb.server.com
+export FLASK_DATABASE_USER=admin
+export FLASK_DATABASE_PASSWORD=supersecure
+</code></pre>
+<pre><code class="language-python"># app.py
+from flask import Flask
+
+app = Flask(__name__)
+app.config.from_prefixed_env()
+
+# Flask's built-in `DEBUG` config automatically uses `FLASK_DEBUG`
+print(f&quot;Debug from env: {app.config['DEBUG']}&quot;)
+
+# You can access custom environment variables too, with the prefix removed
+print(f&quot;DB Host from env: {app.config['DATABASE_HOST']}&quot;)
+</code></pre>
+<p><code>from_prefixed_env</code> can even parse JSON values from environment variables, allowing for more complex data structures. It's a robust method for configuring applications in production.</p>
+</li>
+</ul>
+<h3>Importance of <code>SECRET_KEY</code></h3>
+<p>One of the most critical configuration values is <code>SECRET_KEY</code>. As you saw, its default is <code>None</code>. This key is used for cryptographic operations in Flask, most notably to securely sign session cookies. If <code>SECRET_KEY</code> is not set, or is too simple, your application's sessions will be insecure, making it vulnerable to tampering.</p>
+<p>Always set a strong, randomly generated <code>SECRET_KEY</code> in production, and never commit it directly to version control. Environment variables or secure secrets management systems are ideal for this. The previous example of <code>app.config['SECRET_KEY'] = 'dev-secret-key-please-change'</code> is <em>only</em> suitable for a local development environment.</p>
+<h3>The Configuration Workflow</h3>
+<p>Let's visualize how Flask processes these different configuration sources, acting like a manager gathering information from various sources to run the restaurant:</p>
+<pre class="mermaid">sequenceDiagram
+    participant D as Flask Defaults
+    participant E as OS Environment
+    participant C as Config File
+    participant A as Flask App
+    participant G as app.config
+
+    A->G: Create empty Config
+    D->G: Load default settings (e.g., TESTING=False)
+    E->G: Load FLASK_DEBUG, FLASK_ENV env vars
+    A->C: Load config.py (from_pyfile)
+    C-->G: Update settings (e.g., SECRET_KEY, UPLOAD_FOLDER)
+    E->G: Load FLASK_ prefixed env vars (from_prefixed_env)
+    A->G: Access app.config["SETTING"]
+    G-->A: Return setting value
+</pre>
+<p>This sequence shows that settings loaded later (like from environment variables or custom files) will override earlier settings (like Flask's defaults). This allows for flexible and hierarchical configuration management.</p>
+<p>Now you understand how your Flask application can be customized and controlled through its <code>Config</code> object. You can define various settings, load them from different sources, and ensure your application behaves exactly as you intend.</p>
+<p>But an application isn't just about its internal settings; it's constantly interacting with the outside world, primarily through user requests. How does Flask capture all the nuances of an incoming request—the URL, the method, form data, headers, and more? That's what we'll explore in the next chapter, where we dive into the <code>Request</code> object.</p>
+<p>Go to <a href="03_request.html">Request</a></p>
+
+  <nav class="chapter-nav">
+    <span><a href="01_flask.html">&larr; Flask</a></span>
+    <span><a href="03_request.html">Request &rarr;</a></span>
+  </nav>
+</body>
+</html>

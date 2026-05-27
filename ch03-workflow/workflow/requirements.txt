@@ -1,0 +1,5 @@
+# Install shared deps first:
+#     pip install -r ../../utils/requirements.txt
+# (provides pocketflow, pyyaml, and your LLM provider SDK.)
+#
+# This chapter adds no extra deps.

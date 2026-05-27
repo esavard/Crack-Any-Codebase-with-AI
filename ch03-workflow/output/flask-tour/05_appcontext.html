@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AppContext — flask</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; flask tour</a></p>
+<h1>Chapter 5: AppContext</h1>
+<p>Imagine you're a chef in a bustling kitchen. When an order comes in for a specific dish, you don't run around the entire kitchen looking for ingredients and tools every time. Instead, you have a personal workbench, perfectly set up with everything you need for <em>that specific order</em>: the recipe, the ingredients for that dish, the right knives, and your cutting board. Once you finish that dish, you clear your workbench, and it's ready for the next one.</p>
+<p>In a Flask application, a similar concept exists. Every time a web request comes in, or even when you run a command-line task related to your app, Flask sets up a temporary, isolated &quot;workbench&quot; just for that operation. This workbench ensures that you always have the correct <code>current_app</code>, <code>request</code>, <code>session</code>, and <code>g</code> objects readily available, without having to pass them explicitly to every function. This temporary workspace is called the <strong>AppContext</strong>.</p>
+<p>The <code>AppContext</code> is a central piece of Flask's design, providing a consistent environment for your code to execute. It's how Flask makes these special objects magically accessible via global proxies, ensuring they always point to the data relevant to the <em>current</em> operation.</p>
+<h3>The Essential Tools on Your Workbench</h3>
+<p>Let's look at the key objects that become available within an <code>AppContext</code>:</p>
+<ol>
+<li><strong><code>current_app</code></strong>: As introduced in <a href="01_flask.html">Chapter 1: Flask</a>, this is your main <code>Flask</code> application instance. Inside an <code>AppContext</code>, <code>current_app</code> always refers to the application that is currently processing the request or task.</li>
+<li><strong><code>request</code></strong>: This is the incoming HTTP request, which we explored in detail in <a href="03_request.html">Chapter 3: Request</a>. It holds all the data sent by the client, like URL parameters, form data, and headers.</li>
+<li><strong><code>session</code></strong>: This object represents the user's session data, allowing you to store information across multiple requests (e.g., login status, items in a shopping cart). The <code>session</code> data is typically stored in cookies, which are managed by Flask as part of the <code>Response</code> object (<a href="04_response.html">Chapter 4: Response</a>).</li>
+<li><strong><code>g</code> (globals)</strong>: This is a unique object that acts as a simple scratchpad for the current application context. It's useful for storing temporary data that needs to be accessed by multiple functions during a single request or task, but shouldn't persist beyond that. Think of it as sticky notes on your workbench.</li>
+</ol>
+<h3>The Lifecycle of an AppContext</h3>
+<p>The <code>AppContext</code> isn't something you usually create directly in your web views. Flask automatically handles its creation and destruction for you during each request.</p>
+<p>When a client sends an HTTP request to your Flask application:</p>
+<ol>
+<li>Flask receives the request.</li>
+<li>It creates a new <code>AppContext</code> (which also contains request-specific data, effectively acting as a <code>RequestContext</code> as well – more on this below).</li>
+<li>This <code>AppContext</code> is &quot;pushed&quot; onto a special internal stack. This act of pushing makes <code>current_app</code>, <code>request</code>, <code>session</code>, and <code>g</code> available as context-local proxies.</li>
+<li>Your view function is executed, accessing these proxies as needed.</li>
+<li>Once your view function returns a response, the <code>AppContext</code> is &quot;popped&quot; from the stack, and all its associated data is cleaned up.</li>
+</ol>
+<p>This mechanism ensures that even if many users access your application concurrently, each user's request operates within its own isolated <code>AppContext</code>, preventing data from one request &quot;leaking&quot; into another.</p>
+<h3>Using AppContext Outside of Requests</h3>
+<p>While <code>AppContext</code> is automatically managed for web requests, there are times you might need to create one explicitly. For instance, when running background tasks, command-line scripts, or unit tests that interact with your Flask application's features (like accessing <code>current_app.config</code> or a database connection stored in <code>g</code>), you need to manually establish an <code>AppContext</code>.</p>
+<p>Here's how you can create and use an <code>AppContext</code> manually:</p>
+<pre><code class="language-python">from flask import Flask, current_app, g
+
+app = Flask(__name__)
+app.config[&quot;MY_SETTING&quot;] = &quot;hello from app config&quot;
+
+def do_something_with_app_context():
+    # Inside this function, current_app and g are available
+    print(f&quot;Current app name: {current_app.name}&quot;)
+    print(f&quot;My setting: {current_app.config['MY_SETTING']}&quot;)
+    
+    # Use 'g' as a temporary storage
+    g.some_data = &quot;This is temporary data for this context&quot;
+    print(f&quot;Data in g: {g.some_data}&quot;)
+
+# --- Outside a request or CLI command ---
+print(&quot;Before app context:&quot;)
+# This would raise a RuntimeError:
+# print(current_app.name)
+
+# Manually push an app context
+with app.app_context():
+    print(&quot;Inside app context:&quot;)
+    do_something_with_app_context()
+    # The 'g' object is tied to this specific 'with' block
+    print(f&quot;Still inside context, data in g: {g.some_data}&quot;)
+
+print(&quot;After app context:&quot;)
+# Attempting to access current_app or g outside the 'with' block
+# would again raise a RuntimeError because the context has been popped.
+# print(current_app.name)
+</code></pre>
+<p>Running this script demonstrates that <code>current_app</code> and <code>g</code> are only accessible within the <code>with app.app_context():</code> block. Once the block exits, the context is automatically popped, and those objects become unavailable again.</p>
+<p>Flask achieves this context management using Python's <code>ContextVar</code> and <code>LocalProxy</code> objects (from Werkzeug). <code>ContextVar</code> allows data to be associated with the current execution context, and <code>LocalProxy</code> is the &quot;magic&quot; that makes <code>current_app</code>, <code>request</code>, etc., appear as global variables while actually resolving to the correct context-specific object.</p>
+<h3>AppContext and RequestContext: A Unified Workbench</h3>
+<p>Historically, Flask had both <code>AppContext</code> and <code>RequestContext</code>. The <code>AppContext</code> held application-wide data (<code>current_app</code>, <code>g</code>), while the <code>RequestContext</code> specifically managed request-related data (<code>request</code>, <code>session</code>, URL routing).</p>
+<p>As of Flask 3.2, <code>RequestContext</code> has been merged into <code>AppContext</code>. This means that <code>AppContext</code> now serves as the single, unified workbench for all operations. When an HTTP request comes in, a single <code>AppContext</code> instance is created that holds both the general application context data <em>and</em> the specific request data. This simplifies context management and makes the overall system more streamlined. If you encounter older Flask tutorials or code referring to <code>RequestContext</code>, remember that it's now handled by the comprehensive <code>AppContext</code>.</p>
+<h3>The AppContext in Action</h3>
+<p>Let's visualize how the <code>AppContext</code> brings all these pieces together during a typical web request:</p>
+<pre class="mermaid">sequenceDiagram
+    participant U as User
+    participant B as Browser
+    participant F as Flask App
+    participant AC as AppContext
+    participant P as Proxies (request, session, g, current_app)
+    participant V as View Function
+
+    U->B: Sends HTTP request
+    B->F: HTTP request received
+    F->F: Creates raw Request object
+    F->AC: Creates and pushes new AppContext (containing Request)
+    AC->P: Binds global proxies to context-specific objects
+    F->V: Calls relevant View Function
+    V->P: Accesses request.method, session['user'], g.db_conn, current_app.config
+    P-->V: Provides context-specific data
+    V-->F: Returns Response value
+    F->AC: Pops AppContext (cleans up g, tears down request)
+    P-->P: Proxies become unbound or point to default
+    F->B: Sends HTTP Response
+    B->U: Displays content
+</pre>
+<p>In this flow, the <code>AppContext</code> acts as the orchestrator. It's responsible for setting up the environment before your view function runs, ensuring all global proxies resolve to the correct, isolated data for that specific request. It then meticulously cleans up after the request is processed, making the system ready for the next operation.</p>
+<p>Understanding the <code>AppContext</code> is key to grasping how Flask provides a clean and thread-safe environment for your web applications. It's the invisible force that keeps <code>request</code>, <code>session</code>, <code>g</code>, and <code>current_app</code> always at your fingertips, specific to the current task.</p>
+<p>Now that you know how Flask manages the environment for each request, you're ready to learn how to dynamically generate URLs, which is essential for building interconnected web applications. In the next chapter, we'll dive into the <code>url_for</code> helper function.</p>
+
+  <nav class="chapter-nav">
+    <span><a href="04_response.html">&larr; Response</a></span>
+    <span><a href="06_url_for.html">url_for &rarr;</a></span>
+  </nav>
+</body>
+</html>

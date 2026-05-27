@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>app — express</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; express tour</a></p>
+<h1>Chapter 1: app</h1>
+<p>Imagine you're building a bustling online store, a social media platform, or even a simple personal blog. How does your computer program, your web server, know when someone visits your homepage? What happens when a user clicks a &quot;buy now&quot; button, sending new information to your server? How do you set up the basic structure of your application to handle all these different interactions?</p>
+<p>This is where the <code>app</code> instance in Express.js steps in. Think of the <code>app</code> as the <strong>main switchboard operator</strong> for your entire web application. Every incoming call (HTTP request) first arrives at this switchboard. The operator's job is to listen for calls, direct them to the correct department (route handler), manage the rules and settings for the entire operation, and ensure the right responses are sent back.</p>
+<h3>Getting Started: Creating Your App</h3>
+<p>To begin, you first need to bring Express into your project and create an <code>app</code> instance. This <code>app</code> object is the central instance of your web server, created by calling <code>express()</code>.</p>
+<p>Here’s how you summon your switchboard operator:</p>
+<pre><code class="language-javascript">const express = require('express');
+const app = express(); // This is your app instance!
+</code></pre>
+<p>In this tiny snippet, <code>express()</code> is a function that returns the <code>app</code> object. This <code>app</code> object is where all the magic of configuring and running your server will happen.</p>
+<h3>Opening for Business: Listening for Requests</h3>
+<p>Once you have your <code>app</code> instance, the first thing you want to do is tell it to start listening for incoming requests. This is like the switchboard operator saying, &quot;Okay, I'm ready to take calls now!&quot;</p>
+<p>You do this using the <code>app.listen()</code> method:</p>
+<pre><code class="language-javascript">const express = require('express');
+const app = express();
+const port = 3000; // The port your server will listen on
+
+app.listen(port, () =&gt; {
+  // This callback runs once the server is successfully listening
+  console.log(`Server listening on port ${port}`);
+});
+</code></pre>
+<p>When you run this code, your Express <code>app</code> will start a Node.js HTTP server. It will wait patiently on the specified <code>port</code> (e.g., <code>3000</code>) for any incoming web traffic. Any request sent to <code>http://localhost:3000</code> will now be picked up by your <code>app</code> operator.</p>
+<h3>Directing Incoming Calls: Routing</h3>
+<p>Now that your server is listening, how do you tell it what to do when a specific URL is accessed? For instance, if someone visits <code>/about</code>, you want to show them the about page, not your homepage.</p>
+<p>The <code>app</code> instance is responsible for directing these requests to the appropriate handler functions based on the HTTP method (like GET, POST) and the URL path. This process is called &quot;routing.&quot;</p>
+<pre><code class="language-javascript">// Example: Handle GET requests to the homepage (/)
+app.get('/', (req, res) =&gt; {
+  res.send('Welcome to the homepage!');
+});
+</code></pre>
+<pre><code class="language-javascript">// Example: Handle GET requests to the /about page
+app.get('/about', (req, res) =&gt; {
+  res.send('Learn more about us!');
+});
+</code></pre>
+<ul>
+<li><code>app.get()</code> is one of several methods (<code>app.post()</code>, <code>app.put()</code>, <code>app.delete()</code>, <code>app.all()</code>) that link an HTTP method and a URL path to a <em>route handler function</em>.</li>
+<li>The first argument is the path (e.g., <code>'/'</code>, <code>'/about'</code>).</li>
+<li>The second argument is the handler function that gets executed when a matching request arrives. For now, <code>res.send()</code> is simply a way to quickly send a text response.</li>
+</ul>
+<p>Just like the switchboard operator knows to direct calls to &quot;extension 101&quot; for sales and &quot;extension 102&quot; for support, your <code>app</code> uses these <code>app.get()</code>, <code>app.post()</code>, etc., calls to know which function to run for each specific request.</p>
+<h3>Setting Server Rules: Configuration</h3>
+<p>Your <code>app</code> also acts as the central hub for configuring various settings for your web server. These settings can affect how Express handles requests, generates responses, and integrates with other modules.</p>
+<p>You use <code>app.set()</code> to define a setting and <code>app.get()</code> to retrieve its value.</p>
+<pre><code class="language-javascript">const express = require('express');
+const app = express();
+
+// Enable a setting: e.g., 'view cache' for production
+app.enable('view cache');
+
+// Disable a setting: e.g., 'x-powered-by' header for security
+app.disable('x-powered-by');
+
+// Set a custom value for a setting
+app.set('title', 'My Awesome App');
+app.set('json spaces', 2); // Prettify JSON responses
+
+// You can also use app.set() to get a setting if only one argument is provided
+console.log('App Title:', app.get('title')); // Output: My Awesome App
+console.log('View cache enabled:', app.enabled('view cache')); // Output: true
+</code></pre>
+<ul>
+<li><code>app.set(setting, value)</code>: Assigns a <code>value</code> to a named <code>setting</code>.</li>
+<li><code>app.get(setting)</code>: Retrieves the <code>value</code> of a named <code>setting</code>.</li>
+<li><code>app.enable(setting)</code>: A shortcut for <code>app.set(setting, true)</code>.</li>
+<li><code>app.disable(setting)</code>: A shortcut for <code>app.set(setting, false)</code>.</li>
+<li><code>app.enabled(setting)</code>: Checks if a <code>setting</code> is <code>true</code>.</li>
+<li><code>app.disabled(setting)</code>: Checks if a <code>setting</code> is <code>false</code>.</li>
+</ul>
+<p>These settings act like global configurations for your server, influencing its behavior across all requests unless overridden.</p>
+<h3>Pre-processing Calls: Middleware</h3>
+<p>Sometimes, before a call even reaches a specific department, you might want to perform some general actions, like logging the call, checking caller ID, or decrypting a secure message. In Express, this is the job of <strong>middleware</strong>.</p>
+<p>The <code>app.use()</code> method allows you to add middleware functions that run for <em>every</em> incoming request, or for requests matching a specific path prefix.</p>
+<pre><code class="language-javascript">const express = require('express');
+const app = express();
+
+// This middleware will run for every request
+app.use((req, res, next) =&gt; {
+  console.log('A new request arrived at:', new Date());
+  next(); // Don't forget to call next() to pass control to the next middleware/route!
+});
+
+// A route that will be handled after the middleware
+app.get('/', (req, res) =&gt; {
+  res.send('Homepage handled!');
+});
+
+app.listen(3000, () =&gt; console.log('Server running on port 3000'));
+</code></pre>
+<p>The <code>app.use()</code> method is incredibly powerful and forms a core part of how Express applications work. We'll dedicate an entire chapter to <a href="04_middleware.html">Middleware</a> later. For now, just understand that <code>app</code> is the place where you register these pre-processing steps.</p>
+<h3>How the <code>app</code> Handles Requests</h3>
+<p>Here's a simplified flow of how your Express <code>app</code> orchestrates the handling of an incoming HTTP request:</p>
+<pre class="mermaid">sequenceDiagram
+    participant User as User's Browser
+    participant Node as Node.js HTTP Server
+    participant App as Express App (handle method)
+    participant Router as Internal Router
+    participant Middleware as Registered Middleware
+    participant Handler as Route Handler
+
+    User->>Node: HTTP Request (e.g., GET /)
+    Node->>App: Hand over request (req, res)
+    App->>Middleware: Process first middleware (app.use)
+    Middleware->>Middleware: ...more middleware...
+    Middleware->>Router: 'next()' to internal router
+    Router->>Handler: Match route (app.get)
+    Handler->>App: Send response content (res.send)
+    App->>Node: Send final response
+    Node->>User: HTTP Response
+</pre>
+<p>As you can see, the <code>App</code> instance is at the center of everything, receiving the raw request from the Node.js HTTP server, guiding it through middleware, and delegating it to the correct route handler.</p>
+<h3>The App's Helpers: <code>req</code> and <code>res</code></h3>
+<p>While the <code>app</code> instance is the brain and the switchboard operator, it doesn't actually <em>speak</em> to the callers directly. When a call is directed to a specific department or individual (your route handler), two other crucial tools are used for communication:</p>
+<ul>
+<li>The <code>req</code> object: This represents the <strong>incoming request</strong>. It's how your handler function understands everything the caller said or sent – their phone number, the message they left, the details of their order, etc.</li>
+<li>The <code>res</code> object: This represents the <strong>outgoing response</strong>. It's how your handler function speaks back to the caller – sending them a welcome message, confirming their order, or politely telling them the line is busy.</li>
+</ul>
+<p>In the route handlers like <code>app.get('/', (req, res) =&gt; { ... });</code>, these <code>req</code> and <code>res</code> objects are passed as arguments. They are the primary way your code interacts with the client making the request.</p>
+<p>Now that you understand the central role of the <code>app</code> instance, you might be curious about how exactly you use those <code>req</code> and <code>res</code> objects to understand and respond to client requests. That's precisely what we'll explore in the next two chapters! We'll start by delving into the <a href="02_req.html">req</a> object to see how you can extract all the juicy details from an incoming request.</p>
+
+  <nav class="chapter-nav">
+    <span>&nbsp;</span>
+    <span><a href="02_req.html">req &rarr;</a></span>
+  </nav>
+</body>
+</html>

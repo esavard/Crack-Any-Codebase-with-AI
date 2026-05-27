@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Value — micrograd</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; micrograd tour</a></p>
+<h1>Chapter 1: Value</h1>
+<h2>The Problem: Learning How to Learn</h2>
+<p>Neural networks are complex mathematical models. They take inputs, perform a series of calculations (additions, multiplications, and other transformations), and produce an output. For a neural network to &quot;learn,&quot; it needs to adjust its internal parameters (called weights and biases) so that its output becomes more accurate.</p>
+<p>But how does a neural network figure out <em>which</em> internal parameters to change, and by <em>how much</em>, to improve its performance?</p>
+<p>Imagine you're trying to fine-tune a very intricate machine. You might gently adjust a small screw deep inside and observe how that tiny change affects the machine's overall output. If turning the screw slightly causes a dramatic shift in the output, you know that screw is highly <em>sensitive</em>. If it barely makes a difference, it's not very sensitive at all.</p>
+<p>Neural networks face a similar challenge, but on a much larger scale. They need a systematic way to calculate this &quot;sensitivity&quot; (also known as a <strong>gradient</strong>) for every single number involved in their vast internal calculations. This is the core problem that micrograd's fundamental building block, the <code>Value</code> object, is designed to solve.</p>
+<h2>Introducing the <code>Value</code> Object: A Number with a Memory</h2>
+<p>At its core, <code>micrograd</code> is about making scalar numbers (single numerical values) smarter. It wraps an ordinary number (like <code>3.14</code> or <code>-7</code>) inside a special <code>Value</code> object. This <code>Value</code> object doesn't just store the number itself; it also remembers how it was created and prepares itself to calculate its &quot;sensitivity&quot; to any final result.</p>
+<p>Think of a <code>Value</code> object as a specialized sticky note that holds:</p>
+<ol>
+<li><strong>A number (<code>data</code>):</strong> The actual numerical result of a calculation, like <code>5.0</code>.</li>
+<li><strong>A sensitivity score (<code>grad</code>):</strong> A space to eventually write down how sensitive the final output is to <em>this specific number</em>. Initially, this score is always <code>0</code>.</li>
+<li><strong>A memory of its parents (<code>_prev</code>):</strong> Pointers to the <code>Value</code> objects that were used as inputs to create <em>this</em> <code>Value</code>. This creates a &quot;computational family tree.&quot;</li>
+<li><strong>The operation that created it (<code>_op</code>):</strong> A short label (like <code>'+'</code> for addition or <code>'*'</code> for multiplication) describing the mathematical operation that combined its parents.</li>
+<li><strong>A tiny instruction slip (<code>_backward</code>):</strong> A small, self-contained function that knows <em>how</em> to distribute its own sensitivity score back to its parents, following the rules of calculus.</li>
+</ol>
+<p>Let's see how we create a <code>Value</code> object and inspect its initial contents:</p>
+<pre><code class="language-python">from micrograd.engine import Value
+
+# Create a Value object
+a = Value(3.0)
+
+# Observe its contents
+print(a)
+print(f&quot;Data: {a.data}&quot;)
+print(f&quot;Gradient: {a.grad}&quot;)
+print(f&quot;Parents: {a._prev}&quot;)
+print(f&quot;Operation: {a._op}&quot;)
+</code></pre>
+<p>When you run this code, you'll see:</p>
+<pre><code>Value(data=3.0, grad=0)
+Data: 3.0
+Gradient: 0
+Parents: set()
+Operation:
+</code></pre>
+<p>Initially, <code>a</code> has no parents (<code>_prev</code> is an empty set) and no specific operation (<code>_op</code> is an empty string) because it was directly created from a raw number. Its <code>grad</code> is <code>0</code>, as we haven't yet asked it to calculate any sensitivities.</p>
+<h2>Building a Computational Family Tree</h2>
+<p>The real ingenuity of <code>Value</code> objects comes to light when you perform mathematical operations on them. When you add two <code>Value</code> objects, for example, <code>micrograd</code> doesn't just give you a new ordinary number. Instead, it gives you a <em>new <code>Value</code> object</em> that automatically remembers its &quot;parents&quot; and the specific operation that created it. This builds what's called a <strong>computational graph</strong>.</p>
+<p>Let's trace a simple addition:</p>
+<pre><code class="language-python">from micrograd.engine import Value
+
+a = Value(2.0)
+b = Value(3.0)
+
+c = a + b # This operation creates a new Value object, 'c'
+
+print(c)
+print(f&quot;Data: {c.data}&quot;)
+print(f&quot;Parents: {c._prev}&quot;)
+print(f&quot;Operation: {c._op}&quot;)
+</code></pre>
+<p>The output will be:</p>
+<pre><code>Value(data=5.0, grad=0)
+Data: 5.0
+Parents: {Value(data=3.0, grad=0), Value(data=2.0, grad=0)}
+Operation: +
+</code></pre>
+<p>Notice a few key things:</p>
+<ol>
+<li><code>c</code> correctly holds the numerical sum (<code>5.0</code>) in its <code>data</code> attribute.</li>
+<li><code>c._prev</code> now contains both <code>a</code> and <code>b</code>, establishing them as its direct computational parents.</li>
+<li><code>c._op</code> is <code>'+'</code>, indicating that <code>c</code> was created by an addition operation.</li>
+</ol>
+<p>This process is <code>micrograd</code> building a &quot;computational graph&quot;—a family tree that maps out the relationships and sequence of all calculations.</p>
+<p>Let's peek at a simplified part of the <code>Value</code> class's implementation for addition, to see how this family tree is built:</p>
+<pre><code class="language-python"># From micrograd/engine.py
+class Value:
+    # ... (initializer and other methods)
+
+    def __add__(self, other):
+        # 1. Ensure 'other' is also a Value object.
+        #    If it's a regular number, it's converted to a Value.
+        other = other if isinstance(other, Value) else Value(other)
+
+        # 2. Perform the actual numerical addition.
+        # 3. Create a NEW Value object, 'out'.
+        # 4. Crucially, store 'self' and 'other' as its predecessors (_prev).
+        # 5. Store the operation ('+') that created it.
+        out = Value(self.data + other.data, (self, other), '+')
+
+        # 6. Define a special function, '_backward', for this specific 'out' Value.
+        #    This function knows exactly how to propagate gradients for addition.
+        def _backward():
+            self.grad += out.grad # For addition, gradient flows directly to both inputs
+            other.grad += out.grad
+        out._backward = _backward # Assign this function to out's _backward method
+
+        return out
+</code></pre>
+<p>The <code>__add__</code> method makes it convenient to mix <code>Value</code> objects with regular numbers (scalars). If you write <code>Value(2.0) + 3</code>, <code>micrograd</code> automatically converts <code>3</code> into <code>Value(3.0)</code> before performing the addition.</p>
+<p>This exact pattern—creating a new <code>Value</code> object, linking it to its parents via <code>_prev</code>, setting its <code>_op</code>, and defining its specific <code>_backward</code> function—is repeated for every mathematical operation <code>micrograd</code> supports, such as multiplication (<code>*</code>), exponentiation (<code>**</code>), division (<code>/</code>), subtraction (<code>-</code>), and the Rectified Linear Unit (<code>relu</code>) non-linearity.</p>
+<p>Let's visualize the creation of <code>c = a + b</code> and then <code>d = a * b</code> in this computational graph:</p>
+<pre class="mermaid">sequenceDiagram
+    participant A as Value A
+    participant B as Value B
+    participant C as Value C
+    participant D as Value D
+
+    Note over A,B: Initializing 'Value' objects
+    A->>A: Value(2.0)
+    B->>B: Value(3.0)
+
+    A->>C: '__add__(B)'
+    Note over C: creates 'Value(5.0)'
+    Note over C: 'C._prev' set to '{A, B}'
+    Note over C: 'C._op' set to "'+'"
+    Note over C: 'C._backward' defined for addition
+    C-->>A: links to A
+    C-->>B: links to B
+
+    A->>D: '__mul__(B)'
+    Note over D: creates 'Value(6.0)'
+    Note over D: 'D._prev' set to '{A, B}'
+    Note over D: 'D._op' set to "'*'"
+    Note over D: 'D._backward' defined for multiplication
+    D-->>A: links to A
+    D-->>B: links to B
+</pre>
+<p>This diagram shows how <code>Value</code> objects form a Directed Acyclic Graph (DAG), where each node is a <code>Value</code>, and the arrows represent the flow of computation (and implicitly, the <code>_prev</code> links).</p>
+<p>Let's try a slightly more complex sequence of operations, performing a &quot;forward pass&quot; to calculate the final numerical result:</p>
+<pre><code class="language-python">from micrograd.engine import Value
+
+a = Value(-4.0)
+b = Value(2.0)
+
+# Operation 1: Addition
+c = a + b
+print(f&quot;c: {c.data}&quot;) # Expected: -4.0 + 2.0 = -2.0
+
+# Operation 2: Multiplication
+d = a * b
+print(f&quot;d: {d.data}&quot;) # Expected: -4.0 * 2.0 = -8.0
+
+# Operation 3: Exponentiation
+e = b**3 # Expected: 2.0 * 2.0 * 2.0 = 8.0
+print(f&quot;e: {e.data}&quot;)
+
+# Operation 4: Another Addition
+f = d + e # Expected: -8.0 + 8.0 = 0.0
+print(f&quot;f: {f.data}&quot;)
+
+# Operation 5: ReLU (Rectified Linear Unit)
+g = f.relu() # Expected: max(0, 0.0) = 0.0
+print(f&quot;g: {g.data}&quot;)
+</code></pre>
+<p>Output:</p>
+<pre><code>c: -2.0
+d: -8.0
+e: 8.0
+f: 0.0
+g: 0.0
+</code></pre>
+<p>At this point, we've successfully performed a forward pass: we've calculated the numerical result of a series of operations, ending with <code>g</code>. Each new <code>Value</code> object created along the way implicitly recorded its parents, the operation that produced it, and stored its numerical <code>data</code>. However, the <code>grad</code> attribute for all these <code>Value</code> objects still remains <code>0</code>.</p>
+<h2>What's Next?</h2>
+<p>We've seen how <code>Value</code> objects wrap ordinary numbers and, most importantly, how they automatically build a computational graph by remembering their parents and the specific operation that created them. This graph is like a detailed breadcrumb trail, a complete history of every calculation.</p>
+<p>But the <code>grad</code> attributes are still all <code>0</code>. The real power of <code>micrograd</code> comes from using this computational graph to <em>calculate</em> those sensitivities (gradients). In the next chapter, <a href="02_backward.html">backward</a>, we will explore how <code>micrograd</code> traverses this graph in reverse to fill in all the <code>grad</code> values, effectively teaching our numbers &quot;how sensitive they are&quot; to the final output.</p>
+
+  <nav class="chapter-nav">
+    <span>&nbsp;</span>
+    <span><a href="02_backward.html">backward &rarr;</a></span>
+  </nav>
+</body>
+</html>

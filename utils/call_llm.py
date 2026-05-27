@@ -88,11 +88,13 @@ def call_llm(prompt: str) -> str:
     if cached is not None:
         return cached
 
+    max_out = int(os.environ.get("LLM_MAX_OUTPUT_TOKENS", "16384"))
+
     if provider == "anthropic":
         from anthropic import Anthropic
         resp = Anthropic().messages.create(
             model=model,
-            max_tokens=8192,
+            max_tokens=max_out,
             messages=[{"role": "user", "content": prompt}],
         )
         text = resp.content[0].text
@@ -101,14 +103,20 @@ def call_llm(prompt: str) -> str:
         from openai import OpenAI
         resp = OpenAI().chat.completions.create(
             model=model,
+            max_tokens=max_out,
             messages=[{"role": "user", "content": prompt}],
         )
         text = resp.choices[0].message.content
 
     elif provider == "gemini":
         from google import genai
+        from google.genai import types
         client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-        resp = client.models.generate_content(model=model, contents=prompt)
+        resp = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=types.GenerateContentConfig(max_output_tokens=max_out),
+        )
         text = resp.text
 
     else:

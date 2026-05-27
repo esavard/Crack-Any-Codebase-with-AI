@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>req — express</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; express tour</a></p>
+<h1>Chapter 2: req</h1>
+<p>In <a href="01_app.html">Chapter 1: app</a>, we learned that the <code>app</code> instance acts as the main switchboard operator for your web application. It listens for incoming calls (HTTP requests) and directs them to the right department (your route handler). But once a call is connected to a specific department, how does that department actually understand what the caller wants? What information did the customer provide on their order form?</p>
+<p>This is where the <code>req</code> object comes in. Short for &quot;request,&quot; this object contains all the incoming details from a client. It's like a detailed letter or a filled-out order form from a customer, holding information such as the requested URL, submitted data, and client headers, which your server can then read and process. Every route handler function you define receives this <code>req</code> object as its first argument.</p>
+<h3>Understanding the Incoming Request</h3>
+<p>Let's revisit our basic route handler. When a user visits your homepage, what does your server know about their request?</p>
+<pre><code class="language-javascript">const express = require('express');
+const app = express();
+
+app.get('/', (req, res) =&gt; {
+  // The 'req' object is right here!
+  console.log('Incoming Request Details:', req);
+  res.send('Hello, you sent a request!');
+});
+
+app.listen(3000, () =&gt; console.log('Server running on port 3000'));
+</code></pre>
+<p>If you run this code and navigate to <code>http://localhost:3000</code> in your browser, the <code>console.log(req)</code> statement will output a very large object in your terminal. This <code>req</code> object is an enhanced version of Node.js's standard <code>http.IncomingMessage</code> object, extended by Express with many useful properties and methods to make accessing request information easier.</p>
+<p>Let's break down some of the most frequently used parts of this &quot;order form&quot;:</p>
+<h4>What resource is being requested? (<code>req.url</code>, <code>req.path</code>)</h4>
+<p>The client always requests a specific resource, identified by its URL.</p>
+<ul>
+<li><code>req.url</code>: Provides the full URL path, including the query string.</li>
+<li><code>req.path</code>: Provides only the URL pathname, without the query string.</li>
+</ul>
+<p>Imagine a user visits <code>http://localhost:3000/products/electronics?category=laptops&amp;brand=dell</code>.</p>
+<pre><code class="language-javascript">app.get('/products/:type', (req, res) =&gt; {
+  console.log('Full URL:', req.url);   // Output: /products/electronics?category=laptops&amp;brand=dell
+  console.log('Pathname:', req.path); // Output: /products/electronics
+  res.send('Resource requested.');
+});
+</code></pre>
+<h4>What kind of operation? (<code>req.method</code>)</h4>
+<p>HTTP requests aren't just about <em>what</em> resource is requested, but <em>how</em> it's requested. This is the HTTP method.</p>
+<ul>
+<li><code>req.method</code>: A string indicating the HTTP method (e.g., 'GET', 'POST', 'PUT', 'DELETE').</li>
+</ul>
+<pre><code class="language-javascript">app.get('/submit-form', (req, res) =&gt; {
+  console.log('Method for GET:', req.method); // Output: GET
+  res.send('View form.');
+});
+
+app.post('/submit-form', (req, res) =&gt; {
+  console.log('Method for POST:', req.method); // Output: POST
+  res.send('Form submitted!');
+});
+</code></pre>
+<h4>Dynamic Parts of the URL (<code>req.params</code>)</h4>
+<p>Sometimes, your application needs to handle URLs with dynamic segments, like <code>/users/123</code> where <code>123</code> is a user ID. These are called route parameters.</p>
+<pre><code class="language-javascript">app.get('/users/:userId/profile', (req, res) =&gt; {
+  // If user visits /users/42/profile
+  console.log('User ID:', req.params.userId); // Output: 42
+  res.send(`Viewing profile for user ${req.params.userId}`);
+});
+</code></pre>
+<p>In this example, <code>:userId</code> is a placeholder. Express parses it and makes the value (<code>42</code>) available on <code>req.params</code>. You can access it using the name you defined in the route (<code>userId</code>).</p>
+<h4>Query String Parameters (<code>req.query</code>)</h4>
+<p>Often, clients send additional, optional information in the URL's query string (the part after the <code>?</code>).</p>
+<ul>
+<li><code>req.query</code>: An object containing a property for each query string parameter.</li>
+</ul>
+<p>Using the example URL <code>http://localhost:3000/products/electronics?category=laptops&amp;brand=dell</code>:</p>
+<pre><code class="language-javascript">app.get('/products/:type', (req, res) =&gt; {
+  console.log('Category:', req.query.category); // Output: laptops
+  console.log('Brand:', req.query.brand);     // Output: dell
+  res.send(`Searching for ${req.query.brand} ${req.query.category}.`);
+});
+</code></pre>
+<h4>Submitted Data (<code>req.body</code>)</h4>
+<p>For requests that send data to the server, like a POST request from a form or a PUT request updating a resource, the data is typically in the request body.</p>
+<ul>
+<li><code>req.body</code>: An object containing the data submitted in the request body.</li>
+</ul>
+<p><strong>Important Note:</strong> By default, Express does <em>not</em> parse the request body. To make <code>req.body</code> available, you need to use <strong>middleware</strong>, like Express's built-in <code>express.json()</code> or <code>express.urlencoded()</code>. We will delve into <a href="04_middleware.html">Middleware</a> in a dedicated chapter, but for now, here's how you'd enable it:</p>
+<pre><code class="language-javascript">const express = require('express');
+const app = express();
+
+// Enable JSON body parsing middleware
+app.use(express.json());
+// Or for URL-encoded form data:
+// app.use(express.urlencoded({ extended: true }));
+
+app.post('/new-post', (req, res) =&gt; {
+  // If client sends { &quot;title&quot;: &quot;My Post&quot;, &quot;content&quot;: &quot;Hello world!&quot; }
+  console.log('Post Title:', req.body.title);     // Output: My Post
+  console.log('Post Content:', req.body.content); // Output: Hello world!
+  res.send('Post created successfully!');
+});
+
+app.listen(3000, () =&gt; console.log('Server running on port 3000'));
+</code></pre>
+<h4>Request Headers (<code>req.headers</code>, <code>req.get()</code>)</h4>
+<p>Clients send various headers with their requests, providing meta-information about the request, the client, or acceptable responses.</p>
+<ul>
+<li><code>req.headers</code>: An object containing all HTTP request headers. Header names are lowercased.</li>
+<li><code>req.get(name)</code>: A convenient method to get the value of a specific header, case-insensitively.</li>
+</ul>
+<pre><code class="language-javascript">app.get('/headers-info', (req, res) =&gt; {
+  console.log('User-Agent:', req.get('User-Agent')); // e.g., Mozilla/5.0 ...
+  console.log('Accepts:', req.get('Accept'));       // e.g., text/html,application/xhtml+xml,...
+  res.send('Header information logged.');
+});
+</code></pre>
+<h4>Client IP Address (<code>req.ip</code>)</h4>
+<p>Knowing the client's IP address can be useful for logging, analytics, or security.</p>
+<ul>
+<li><code>req.ip</code>: The remote IP address of the request.</li>
+</ul>
+<pre><code class="language-javascript">app.get('/who-am-i', (req, res) =&gt; {
+  console.log('Client IP Address:', req.ip); // Output: ::1 (for localhost IPv6) or 127.0.0.1 (IPv4)
+  res.send(`You are connecting from ${req.ip}`);
+});
+</code></pre>
+<h3>The Journey of a Request and <code>req</code></h3>
+<p>Let's visualize how the <code>req</code> object is created and used within your Express application:</p>
+<pre class="mermaid">sequenceDiagram
+    participant Browser as User's Browser
+    participant NodeServer as Node.js HTTP Server
+    participant ExpressApp as Express App
+    participant ReqObject as req Object
+    participant Handler as Route Handler
+
+    Browser->>NodeServer: HTTP Request (e.g., GET /hello?name=Alice)
+    NodeServer->>ExpressApp: Hand over raw request (http.IncomingMessage)
+    ExpressApp->>ReqObject: Creates new req object, populates it
+    Note over ExpressApp,ReqObject: Extracts URL, headers, method, etc.<br/>Adds Express-specific properties (query, params, body after middleware)
+    ExpressApp->>Handler: Invokes route handler with req, res
+    Handler->>ReqObject: Reads information from req (e.g., req.query.name)
+    Handler->>Browser: (Response sent via 'res')
+</pre>
+<p>As you can see, the <code>Express App</code> takes the raw request from the Node.js server, enriches it, and then hands off this comprehensive <code>req</code> object to your <code>Route Handler</code>. This allows your code to easily access all the client's intentions and data.</p>
+<h3>Conclusion</h3>
+<p>The <code>req</code> object is your window into the client's request. It’s how your server &quot;reads&quot; the customer's order form, understanding what they want, how they asked for it, and any details they provided. Mastering <code>req</code> allows you to build dynamic and responsive web applications that adapt to user input.</p>
+<p>Now that you know how to <em>read</em> all the incoming details from a client using the <code>req</code> object, the next logical step is to learn how to <em>send back a response</em>. In the next chapter, we'll dive into the <a href="03_res.html">res</a> object, which is how your server &quot;speaks back&quot; to the client, sending data, setting status codes, and much more.</p>
+
+  <nav class="chapter-nav">
+    <span><a href="01_app.html">&larr; app</a></span>
+    <span><a href="03_res.html">res &rarr;</a></span>
+  </nav>
+</body>
+</html>

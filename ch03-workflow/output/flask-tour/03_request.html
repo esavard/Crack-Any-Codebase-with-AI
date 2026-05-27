@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Request — flask</title>
+<style>
+  :root { --fg: #0d1117; --muted: #57606a; --bg: #fff; --soft: #f6f8fa; --accent: #0969da; --rule: #d0d7de; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0 auto; max-width: 880px; padding: 32px 24px; }
+  h1 { font-size: 1.9em; margin: 0 0 .2em; }
+  h2 { font-size: 1.35em; margin: 1.8em 0 .4em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1.1em; margin: 1.4em 0 .3em; }
+  p, li, td, th { color: var(--fg); }
+  p { margin: .8em 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: .35em 0; }
+  code { font: .9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; background: var(--soft); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--soft); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: .88em; }
+  pre.mermaid { background: var(--soft); padding: 16px; text-align: center; }
+  blockquote { border-left: 3px solid var(--rule); margin: 1em 0; padding: .2em 1em; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; font-size: .92em; }
+  th { background: var(--soft); }
+  .lens { display: inline-block; padding: 2px 8px; background: var(--soft); border-radius: 4px; font-size: .85em; }
+  nav.chapter-nav { margin: 2em 0 0; padding: 1em 0; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: .95em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</head>
+<body>
+  <p class="muted"><a href="index.html">&larr; flask tour</a></p>
+<h1>Chapter 3: Request</h1>
+<p>Imagine you're running a busy online store. A customer visits your website, adds items to their cart, fills out a shipping form, and clicks &quot;Place Order.&quot; As the shop owner, how do you know what page they were on, which products they selected, their shipping address, or even what type of browser they used? All this information is crucial for fulfilling their order.</p>
+<p>In the world of web applications, every time your browser interacts with a Flask server, it sends a message packed with details. This message is called an HTTP request. Flask's job isn't just to receive this message, but to decode it, parse its contents, and make all that information easily accessible to your application. This is where the <code>request</code> object comes in.</p>
+<p>The <code>request</code> object is a special proxy provided by Flask that represents all the incoming data from the current visitor's message. Think of it as that filled-out order form from our online store analogy, neatly organized and ready for you to read. It contains everything from the URL the user is trying to reach, to any data they might have sent (like form inputs or uploaded files), and even information about their browser.</p>
+<p>You access this <code>request</code> object directly from <code>flask</code> to understand user intent and process their actions.</p>
+<p>Let's see how we can use it in a simple Flask application.</p>
+<pre><code class="language-python">from flask import Flask, request
+
+app = Flask(__name__)
+
+@app.route(&quot;/&quot;)
+def index():
+    # What page did the user ask for?
+    # What method did they use (GET, POST, etc.)?
+    return f&quot;You are on the {request.path} page, using the {request.method} method.&quot;
+
+@app.route(&quot;/submit&quot;, methods=[&quot;GET&quot;, &quot;POST&quot;])
+def submit_form():
+    if request.method == &quot;POST&quot;:
+        # Access form data sent via POST
+        user_name = request.form.get(&quot;username&quot;)
+        return f&quot;Hello, {user_name}! Your form was submitted.&quot;
+    # If it's a GET request, show a simple form
+    return &quot;&quot;&quot;
+        &lt;form method=&quot;post&quot;&gt;
+            &lt;label for=&quot;username&quot;&gt;Username:&lt;/label&gt;
+            &lt;input type=&quot;text&quot; id=&quot;username&quot; name=&quot;username&quot;&gt;
+            &lt;input type=&quot;submit&quot; value=&quot;Submit&quot;&gt;
+        &lt;/form&gt;
+    &quot;&quot;&quot;
+
+if __name__ == &quot;__main__&quot;:
+    app.run(debug=True)
+</code></pre>
+<p>In this example:</p>
+<ul>
+<li>We import <code>request</code> from <code>flask</code>.</li>
+<li>In the <code>index</code> view, we use <code>request.path</code> to get the requested URL path (e.g., <code>/</code>) and <code>request.method</code> to see if it was a <code>GET</code>, <code>POST</code>, etc.</li>
+<li>In the <code>submit_form</code> view, we check <code>request.method</code>. If it's a <code>POST</code> request (meaning the form was submitted), we access the data sent in the form using <code>request.form.get(&quot;username&quot;)</code>. <code>request.form</code> behaves like a dictionary, allowing you to access input fields by their <code>name</code> attribute.</li>
+</ul>
+<h3>Key Attributes of the <code>request</code> Object</h3>
+<p>The <code>request</code> object exposes a wealth of information through various attributes, making it the primary tool for interacting with incoming data.</p>
+<h4>1. <code>request.method</code></h4>
+<p>This attribute tells you the HTTP method used for the request (e.g., <code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>DELETE</code>). This is crucial for distinguishing between, for example, a user simply viewing a page (<code>GET</code>) and a user submitting data (<code>POST</code>).</p>
+<pre><code class="language-python">@app.route(&quot;/data&quot;, methods=[&quot;GET&quot;, &quot;POST&quot;, &quot;PUT&quot;])
+def handle_data():
+    if request.method == &quot;POST&quot;:
+        return &quot;Received new data via POST.&quot;
+    elif request.method == &quot;PUT&quot;:
+        return &quot;Updated data via PUT.&quot;
+    else: # GET
+        return &quot;You can GET, POST, or PUT to this endpoint.&quot;
+</code></pre>
+<h4>2. <code>request.args</code> (Query Parameters)</h4>
+<p>When you see a URL like <code>http://example.com/search?query=flask&amp;page=1</code>, the <code>query</code> and <code>page</code> parts are called query parameters. <code>request.args</code> is a dictionary-like object that holds these parameters.</p>
+<pre><code class="language-python">@app.route(&quot;/search&quot;)
+def search():
+    query = request.args.get(&quot;query&quot;, &quot;No query provided&quot;)
+    page = request.args.get(&quot;page&quot;, &quot;1&quot;)
+    return f&quot;Searching for '{query}' on page {page}.&quot;
+</code></pre>
+<p>Here, <code>.get()</code> is used for safety, providing a default value if the parameter isn't present, preventing errors.</p>
+<h4>3. <code>request.form</code> (Form Data)</h4>
+<p>For data submitted through HTML forms using the <code>POST</code> method, <code>request.form</code> provides access to the input fields.</p>
+<pre><code class="language-python">@app.route(&quot;/profile&quot;, methods=[&quot;POST&quot;])
+def update_profile():
+    email = request.form.get(&quot;email&quot;)
+    password = request.form.get(&quot;password&quot;)
+    return f&quot;Profile updated for {email}!&quot;
+</code></pre>
+<h4>4. <code>request.json</code> (JSON Data)</h4>
+<p>Modern web applications often send data in JSON format, especially with JavaScript frontends. If the incoming request has a <code>Content-Type: application/json</code> header, Flask will automatically parse the body into a Python dictionary or list, accessible via <code>request.json</code>.</p>
+<pre><code class="language-python">@app.route(&quot;/api/items&quot;, methods=[&quot;POST&quot;])
+def create_item():
+    if request.is_json:
+        data = request.json # This will be a Python dictionary/list
+        item_name = data.get(&quot;name&quot;)
+        item_price = data.get(&quot;price&quot;)
+        return f&quot;Created item: {item_name} at ${item_price}.&quot;, 201
+    return &quot;Request must be JSON&quot;, 400
+</code></pre>
+<p>Note <code>request.is_json</code> to easily check if the request contains JSON data.</p>
+<h4>5. <code>request.headers</code> (HTTP Headers)</h4>
+<p>HTTP requests include various headers that provide metadata about the request, such as the <code>User-Agent</code> (browser info), <code>Referer</code> (previous page), or <code>Accept-Language</code>. <code>request.headers</code> gives you access to these.</p>
+<pre><code class="language-python">@app.route(&quot;/browser-info&quot;)
+def browser_info():
+    user_agent = request.headers.get(&quot;User-Agent&quot;)
+    return f&quot;Your browser: {user_agent}&quot;
+</code></pre>
+<h4>6. <code>request.path</code> and <code>request.url</code></h4>
+<ul>
+<li><code>request.path</code>: The path component of the URL, without the domain, scheme, or query string (e.g., <code>/users/1</code>).</li>
+<li><code>request.url</code>: The full URL including scheme, domain, path, and query string (e.g., <code>http://localhost:5000/users/1?active=true</code>).</li>
+</ul>
+<pre><code class="language-python">@app.route(&quot;/page/&lt;name&gt;&quot;)
+def show_page(name):
+    return f&quot;You visited {request.path}. The full URL was {request.url}.&quot;
+</code></pre>
+<h3>The Request Context and Global Proxy</h3>
+<p>As we learned in <a href="01_flask.html">Chapter 1: Flask</a>, the <code>Flask</code> object manages the application lifecycle. When a request comes in, Flask sets up a &quot;request context.&quot; This context is like a temporary workspace that holds all the information pertaining to the <em>current</em> request, including the <code>request</code> object itself.</p>
+<p><code>request</code> (and other objects like <code>session</code> and <code>g</code>) aren't direct objects you create. They are special proxies that Flask automatically maps to the correct request-specific data for the current active request. This means that no matter where you access <code>request</code> in your code during the handling of an HTTP request, it will always refer to the details of <em>that specific request</em>.</p>
+<p>If you try to access <code>request</code> outside of an active request context (e.g., directly in a Python script without running the Flask server), you'll get a <code>RuntimeError</code> because there's no &quot;current request&quot; for the proxy to point to.</p>
+<p>You might remember from <a href="02_config.html">Chapter 2: Config</a> how Flask uses configuration settings to define its behavior. The <code>request</code> object also interacts with <code>Config</code>. For instance, <code>app.config['MAX_CONTENT_LENGTH']</code> directly controls the maximum size of incoming request bodies, protecting your server from unusually large uploads.</p>
+<pre><code class="language-python"># From src/flask/wrappers.py
+class Request(RequestBase):
+    # ...
+    @property
+    def max_content_length(self) -&gt; int | None:
+        &quot;&quot;&quot;The maximum number of bytes that will be read during this request. If
+        this limit is exceeded, a 413 :exc:`~werkzeug.exceptions.RequestEntityTooLarge`
+        error is raised.
+        &quot;&quot;&quot;
+        if self._max_content_length is not None:
+            return self._max_content_length
+
+        if not current_app:
+            return super().max_content_length
+
+        return current_app.config[&quot;MAX_CONTENT_LENGTH&quot;]
+    # ...
+</code></pre>
+<p>This snippet from Flask's source shows how <code>request.max_content_length</code> defaults to the value set in <code>current_app.config</code>.</p>
+<h3>The Request Lifecycle</h3>
+<p>Let's visualize how an incoming request becomes the accessible <code>request</code> object in your view function:</p>
+<pre class="mermaid">sequenceDiagram
+    participant U as User
+    participant B as Browser
+    participant F as Flask App
+    participant C as Request Context
+    participant R as request object
+    participant V as View Function
+
+    U->B: Types URL / fills form
+    B->F: Sends HTTP request (URL, method, headers, body)
+    F->F: Creates Request Context (AppContext)
+    F->C: Populates Request Context with HTTP request data
+    C->R: Makes request object available as proxy
+    F->V: Calls appropriate view function
+    V->R: Accesses request.method, request.args, etc.
+    R-->V: Returns requested data
+    V-->F: Returns response value
+    F->B: Sends HTTP response
+    B->U: Displays content
+</pre>
+<p>In this diagram:</p>
+<ol>
+<li>The <strong>User</strong> interacts with their <strong>Browser</strong>.</li>
+<li>The <strong>Browser</strong> sends an HTTP request to the <strong>Flask App</strong>.</li>
+<li>The <strong>Flask App</strong> (our restaurant manager from <a href="01_flask.html">Chapter 1: Flask</a>) receives the raw HTTP message.</li>
+<li>Flask then creates a <strong>Request Context</strong> (which is an <code>AppContext</code> instance), a temporary container for all request-specific information.</li>
+<li>Within this context, Flask parses the raw HTTP request data and makes it available through the <code>request</code> proxy object.</li>
+<li>Flask routes the request to the correct <strong>View Function</strong>.</li>
+<li>The <strong>View Function</strong> can now easily access all the client's information through the <code>request</code> proxy.</li>
+</ol>
+<p>Understanding the <code>request</code> object is fundamental to building interactive web applications with Flask. It's how your server &quot;listens&quot; to the client and understands what they want to do.</p>
+<p>Now that you know how Flask receives and interprets client requests, the next logical step is to understand how your application sends information <em>back</em> to the client. This outgoing communication is handled by Flask's <code>Response</code> object, which we'll explore in the next chapter.</p>
+<p>Go to <a href="04_response.html">Response</a></p>
+
+  <nav class="chapter-nav">
+    <span><a href="02_config.html">&larr; Config</a></span>
+    <span><a href="04_response.html">Response &rarr;</a></span>
+  </nav>
+</body>
+</html>
