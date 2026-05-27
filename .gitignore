@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# LLM response cache (cheap to regenerate; not worth committing)
+utils/.cache/
+
+# Local environment overrides
+.env
+.env.local
+
+# Editors
+.vscode/
+.idea/
+.DS_Store
+
+# Temp dumps from running the chapters
+*.dump.txt
+*-dump.txt
