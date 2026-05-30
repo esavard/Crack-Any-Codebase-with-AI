@@ -26,11 +26,7 @@ ch05-product-intent/
 
 ```bash
 pip install -r ../utils/requirements.txt
-export GEMINI_API_KEY=...    # required for text + image (image generation only works with Gemini)
-# OR for text-only (skip illustration):
-export ANTHROPIC_API_KEY=...
-export CH5_NO_IMAGE=1
-
+export GEMINI_API_KEY=...      # for both text and image generation
 cd workflow
 python main.py path/to/repo
 ```
@@ -87,9 +83,7 @@ flowchart LR
     position --> surprises[SurprisesAndAbsences]
 ```
 
-Six nodes. Each LLM-calling node uses `Node(max_retries=3, wait=2)` so transient errors retry cleanly. No `try/except` in the main path.
-
-`IllustratePain` is the only node that may skip silently. It needs `GEMINI_API_KEY` (the image model is Gemini-only) and the env var `CH5_NO_IMAGE` to be unset. If either condition fails it leaves `pain_image_path = None` and the rendered HTML omits the picture. The story is still complete without it.
+Six nodes. Each LLM-calling node uses `Node(max_retries=3, wait=2)` so transient errors retry cleanly. No `try/except` in the main path — the one legitimate failure recovery is `IllustratePain.exec_fallback`, which catches "image generation failed after retries" and turns it into a clean skip. See the optional-illustration paths above.
 
 ## How the HTML is built
 

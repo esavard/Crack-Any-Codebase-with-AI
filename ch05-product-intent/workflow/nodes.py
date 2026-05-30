@@ -106,9 +106,18 @@ class IllustratePain(Node):
       1. LLM writes a detailed image prompt from pain + variant.
       2. Image model renders it.
 
-    Optional. If GEMINI_API_KEY is missing or the image model fails, we skip
-    silently and leave shared["pain_image_path"] = None. Pain is the headline,
-    not the illustration.
+    THIS NODE IS OPTIONAL. The story renders fine without an image. Three
+    paths land at "no image, story still complete":
+
+      - No GEMINI_API_KEY in env. We never call the image model. The user is
+        on a non-Gemini provider (Anthropic, OpenAI) and explicitly chose
+        text-only.
+      - CH5_NO_IMAGE=1 in env. Explicit opt-out, useful for CI or fast iter.
+      - Image model call fails after retries (network, quota, model error,
+        safety filter, whatever). We catch via exec_fallback and skip.
+
+    In all three cases shared["pain_image_path"] ends up None, and the
+    renderer omits the image cleanly.
     """
     def __init__(self):
         super().__init__(max_retries=2, wait=2)
@@ -118,7 +127,7 @@ class IllustratePain(Node):
             "pain": shared["pain"],
             "variant": shared["variant"],
             "out_path": shared["pain_image_path_target"],
-            "skip": not os.environ.get("GEMINI_API_KEY") or os.environ.get("CH5_NO_IMAGE"),
+            "skip": not os.environ.get("GEMINI_API_KEY") or bool(os.environ.get("CH5_NO_IMAGE")),
         }
 
     def exec(self, ctx):
@@ -129,12 +138,22 @@ class IllustratePain(Node):
         image_prompt = call_llm(template.format(pain=ctx["pain"], variant=ctx["variant"])).strip()
         return call_image(image_prompt, ctx["out_path"])
 
+    def exec_fallback(self, prep_res, exc):
+        # Retries are exhausted. The story is the point; the image is decoration.
+        # Log clearly and continue with no image.
+        print(f"  Illustration: failed after retries ({type(exc).__name__}: {exc}). Skipping.")
+        return None
+
     def post(self, shared, prep_res, exec_res):
         shared["pain_image_path"] = exec_res
         if exec_res:
             print(f"  Illustration: {os.path.basename(exec_res)}")
-        else:
-            print("  Illustration: skipped (no GEMINI_API_KEY or CH5_NO_IMAGE set)")
+        elif prep_res["skip"]:
+            reason = ("no GEMINI_API_KEY (image gen requires Gemini)"
+                      if not os.environ.get("GEMINI_API_KEY")
+                      else "CH5_NO_IMAGE=1 set")
+            print(f"  Illustration: skipped ({reason})")
+        # else: exec_fallback already printed the failure reason
 
 
 class SurprisesAndAbsences(Node):
