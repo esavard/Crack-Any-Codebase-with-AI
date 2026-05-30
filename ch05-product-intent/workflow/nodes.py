@@ -12,7 +12,7 @@ import os, re, sys, yaml
 from pocketflow import Node
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from utils import call_llm, crawl  # noqa: E402
+from utils import call_llm, call_image, crawl  # noqa: E402
 
 PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'prompts')
 
@@ -29,14 +29,18 @@ def parse_yaml(text):
 
 class FetchRepo(Node):
     def prep(self, shared):
-        return shared["repo_path"]
+        return {
+            "repo_path": shared["repo_path"],
+            "include": shared.get("include") or None,
+            "exclude": shared.get("exclude") or None,
+        }
 
-    def exec(self, repo_path):
-        return crawl(repo_path)
+    def exec(self, ctx):
+        return crawl(ctx["repo_path"], include=ctx["include"], exclude=ctx["exclude"])
 
     def post(self, shared, prep_res, exec_res):
         shared["codebase"] = exec_res
-        print(f"  Crawled {len(exec_res):,} chars from {prep_res}")
+        print(f"  Crawled {len(exec_res):,} chars from {prep_res['repo_path']}")
 
 
 class PainScene(Node):
@@ -93,6 +97,44 @@ class CompetitivePositioning(Node):
         shared["positioning"] = exec_res
         print(f"  Positioning: {len(exec_res['competitors'])} competitors, "
               f"{len(exec_res['dimensions'])} dimensions")
+
+
+class IllustratePain(Node):
+    """Generate a before/after cartoon illustration for the pain scene.
+
+    Two steps:
+      1. LLM writes a detailed image prompt from pain + variant.
+      2. Image model renders it.
+
+    Optional. If GEMINI_API_KEY is missing or the image model fails, we skip
+    silently and leave shared["pain_image_path"] = None. Pain is the headline,
+    not the illustration.
+    """
+    def __init__(self):
+        super().__init__(max_retries=2, wait=2)
+
+    def prep(self, shared):
+        return {
+            "pain": shared["pain"],
+            "variant": shared["variant"],
+            "out_path": shared["pain_image_path_target"],
+            "skip": not os.environ.get("GEMINI_API_KEY") or os.environ.get("CH5_NO_IMAGE"),
+        }
+
+    def exec(self, ctx):
+        if ctx["skip"]:
+            return None
+        prompts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'prompts')
+        template = open(os.path.join(prompts_dir, "pain-illustration.md")).read()
+        image_prompt = call_llm(template.format(pain=ctx["pain"], variant=ctx["variant"])).strip()
+        return call_image(image_prompt, ctx["out_path"])
+
+    def post(self, shared, prep_res, exec_res):
+        shared["pain_image_path"] = exec_res
+        if exec_res:
+            print(f"  Illustration: {os.path.basename(exec_res)}")
+        else:
+            print("  Illustration: skipped (no GEMINI_API_KEY or CH5_NO_IMAGE set)")
 
 
 class SurprisesAndAbsences(Node):
