@@ -12,7 +12,7 @@ import os, re, sys, yaml
 from pocketflow import Node
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from utils import call_llm, crawl  # noqa: E402
+from utils import call_llm, call_image, crawl  # noqa: E402
 
 PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'prompts')
 
@@ -29,14 +29,18 @@ def parse_yaml(text):
 
 class FetchRepo(Node):
     def prep(self, shared):
-        return shared["repo_path"]
+        return {
+            "repo_path": shared["repo_path"],
+            "include": shared.get("include") or None,
+            "exclude": shared.get("exclude") or None,
+        }
 
-    def exec(self, repo_path):
-        return crawl(repo_path)
+    def exec(self, ctx):
+        return crawl(ctx["repo_path"], include=ctx["include"], exclude=ctx["exclude"])
 
     def post(self, shared, prep_res, exec_res):
         shared["codebase"] = exec_res
-        print(f"  Crawled {len(exec_res):,} chars from {prep_res}")
+        print(f"  Crawled {len(exec_res):,} chars from {prep_res['repo_path']}")
 
 
 class PainScene(Node):
@@ -93,6 +97,63 @@ class CompetitivePositioning(Node):
         shared["positioning"] = exec_res
         print(f"  Positioning: {len(exec_res['competitors'])} competitors, "
               f"{len(exec_res['dimensions'])} dimensions")
+
+
+class IllustratePain(Node):
+    """Generate a before/after cartoon illustration for the pain scene.
+
+    Two steps:
+      1. LLM writes a detailed image prompt from pain + variant.
+      2. Image model renders it.
+
+    THIS NODE IS OPTIONAL. The story renders fine without an image. Three
+    paths land at "no image, story still complete":
+
+      - No GEMINI_API_KEY in env. We never call the image model. The user is
+        on a non-Gemini provider (Anthropic, OpenAI) and explicitly chose
+        text-only.
+      - CH5_NO_IMAGE=1 in env. Explicit opt-out, useful for CI or fast iter.
+      - Image model call fails after retries (network, quota, model error,
+        safety filter, whatever). We catch via exec_fallback and skip.
+
+    In all three cases shared["pain_image_path"] ends up None, and the
+    renderer omits the image cleanly.
+    """
+    def __init__(self):
+        super().__init__(max_retries=2, wait=2)
+
+    def prep(self, shared):
+        return {
+            "pain": shared["pain"],
+            "variant": shared["variant"],
+            "out_path": shared["pain_image_path_target"],
+            "skip": not os.environ.get("GEMINI_API_KEY") or bool(os.environ.get("CH5_NO_IMAGE")),
+        }
+
+    def exec(self, ctx):
+        if ctx["skip"]:
+            return None
+        prompts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'prompts')
+        template = open(os.path.join(prompts_dir, "pain-illustration.md")).read()
+        image_prompt = call_llm(template.format(pain=ctx["pain"], variant=ctx["variant"])).strip()
+        return call_image(image_prompt, ctx["out_path"])
+
+    def exec_fallback(self, prep_res, exc):
+        # Retries are exhausted. The story is the point; the image is decoration.
+        # Log clearly and continue with no image.
+        print(f"  Illustration: failed after retries ({type(exc).__name__}: {exc}). Skipping.")
+        return None
+
+    def post(self, shared, prep_res, exec_res):
+        shared["pain_image_path"] = exec_res
+        if exec_res:
+            print(f"  Illustration: {os.path.basename(exec_res)}")
+        elif prep_res["skip"]:
+            reason = ("no GEMINI_API_KEY (image gen requires Gemini)"
+                      if not os.environ.get("GEMINI_API_KEY")
+                      else "CH5_NO_IMAGE=1 set")
+            print(f"  Illustration: skipped ({reason})")
+        # else: exec_fallback already printed the failure reason
 
 
 class SurprisesAndAbsences(Node):

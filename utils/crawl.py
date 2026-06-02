@@ -12,8 +12,21 @@ frozensets so you can union or difference them:
     crawl("repo/", skip_dirs=DEFAULT_SKIP_DIR | {"my-generated-dir"})
     # restrict to one language:
     crawl("repo/", keep_ext={".py"})
+
+For path-aware filtering (subpaths, specific file patterns, recursive subdirs)
+pass `include` and `exclude` as lists of .gitignore-style patterns:
+
+    # only keep files under src/core/ or pkg/
+    crawl("repo/", include=["src/core/**", "pkg/**"])
+    # drop everything matching these patterns
+    crawl("repo/", exclude=["**/old/**", "**/*_test.go", "examples/legacy/**"])
+
+Patterns are matched against the path relative to `root`. Both lists default
+to empty (no path filtering). Patterns follow the same rules as `.gitignore`.
 """
 import os
+
+import pathspec
 
 
 # Source extensions across the common stacks.
@@ -93,17 +106,49 @@ def _wanted(filename, keep_ext, keep_names):
     return os.path.splitext(filename)[1] in keep_ext
 
 
+def _compile(patterns):
+    """Compile a list of .gitignore-style patterns into a PathSpec, or None if empty."""
+    if not patterns:
+        return None
+    return pathspec.GitIgnoreSpec.from_lines(patterns)
+
+
 def list_files(root, *, keep_ext=DEFAULT_KEEP_EXT, skip_dirs=DEFAULT_SKIP_DIR,
-               keep_names=DEFAULT_KEEP_NAMES, max_file_bytes=DEFAULT_MAX_FILE_BYTES):
-    """Walk the tree and return paths that pass the filters. No file content read."""
+               keep_names=DEFAULT_KEEP_NAMES, max_file_bytes=DEFAULT_MAX_FILE_BYTES,
+               include=None, exclude=None):
+    """Walk the tree and return paths that pass the filters. No file content read.
+
+    Args:
+        root: directory to walk.
+        keep_ext: file extensions to keep (DEFAULT_KEEP_EXT covers ~85 languages).
+        skip_dirs: directory basenames to prune entirely (DEFAULT_SKIP_DIR covers
+            the universal noise: tests, docs, build artifacts, caches, vendored).
+        keep_names: extensionless filenames that ARE source (Dockerfile, Makefile).
+        max_file_bytes: per-file size cap. Drops generated files and oversized dumps.
+        include: list of .gitignore-style patterns. If non-empty, ONLY files whose
+            relative path matches at least one pattern are kept. Examples:
+                ["src/core/**", "pkg/**"]  # restrict to two subtrees
+                ["**/*.go", "go.mod"]      # only Go source + module file
+        exclude: list of .gitignore-style patterns. Files whose relative path
+            matches any pattern are dropped. Applied after `include`. Examples:
+                ["**/*_test.go", "examples/legacy/**"]
+                ["docs/old/**", "**/.generated.*"]
+    """
     out = []
     skip = set(skip_dirs)
+    include_spec = _compile(include)
+    exclude_spec = _compile(exclude)
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in skip]
         for f in sorted(filenames):
             if not _wanted(f, keep_ext, keep_names):
                 continue
             path = os.path.join(dirpath, f)
+            rel = os.path.relpath(path, root)
+            if include_spec is not None and not include_spec.match_file(rel):
+                continue
+            if exclude_spec is not None and exclude_spec.match_file(rel):
+                continue
             if max_file_bytes and os.path.getsize(path) > max_file_bytes:
                 continue
             out.append(path)

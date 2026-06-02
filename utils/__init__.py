@@ -1,4 +1,4 @@
-from .call_llm import call_llm
+from .call_llm import call_llm, call_image
 from .crawl import (
     crawl,
     list_files,
