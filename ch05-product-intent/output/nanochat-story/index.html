@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>nanochat: product story</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f8fafc;
+    --surface: #fff;
+    --text: #0f172a;
+    --muted: #64748b;
+    --rule: #e2e8f0;
+    --accent: #3b82f6;
+    --accent-soft: #eff6ff;
+    --good: #22c55e;
+    --warn: #f59e0b;
+    --warn-soft: #fffbeb;
+    --warn-ink: #92400e;
+    --danger: #ef4444;
+    --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-lg: 0 8px 24px rgba(15,23,42,.08), 0 2px 6px rgba(15,23,42,.04);
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: var(--bg); color: var(--text); margin: 0;
+    line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  code, .mono { font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+  main { max-width: 920px; margin: 0 auto; padding: 0 24px 48px; }
+
+  /* Hero */
+  .hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: #fff; padding: 56px 24px 48px; text-align: center;
+    border-bottom: 1px solid var(--rule);
+  }
+  .hero-inner { max-width: 920px; margin: 0 auto; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    color: #93c5fd; font-size: .72rem; font-weight: 700;
+    letter-spacing: .18em; text-transform: uppercase;
+  }
+  .eyebrow::before { content: ''; width: 18px; height: 2px; background: var(--accent); }
+  .hero h1 {
+    font-size: 2.4rem; font-weight: 800; letter-spacing: -.025em;
+    margin: 16px 0 14px; color: #fff;
+  }
+  .hero h1 .name { color: #60a5fa; }
+  .hero .sub {
+    font-size: 1.05rem; color: #cbd5e1; max-width: 760px;
+    margin: 0 auto; line-height: 1.65;
+  }
+
+  /* Section labels */
+  .sec { margin: 40px 0 0; }
+  .sec:first-of-type { margin-top: 32px; }
+  .sec-label {
+    display: flex; align-items: center; gap: 10px;
+    font-size: .72rem; font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 14px;
+  }
+  .sec-label::before {
+    content: ''; width: 3px; height: 16px;
+    background: var(--accent); border-radius: 2px;
+  }
+  .sec-intro { color: var(--muted); font-size: .92rem; margin: -4px 0 16px; }
+
+  /* Pain card */
+  .pain-card {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: var(--radius); padding: 18px 22px;
+    box-shadow: var(--shadow); border-left: 3px solid var(--danger);
+  }
+  .pain-card .pain-label {
+    font-size: .65rem; font-weight: 700; letter-spacing: .14em;
+    color: var(--danger); text-transform: uppercase; margin-bottom: 8px;
+  }
+  .pain-card .pain-body {
+    display: grid; grid-template-columns: 1fr; gap: 16px; align-items: center;
+  }
+  .pain-card.has-image .pain-body { grid-template-columns: 1fr 280px; }
+  @media (max-width: 640px) {
+    .pain-card.has-image .pain-body { grid-template-columns: 1fr; }
+  }
+  .pain-card p {
+    font-size: 1.02rem; line-height: 1.65; color: #334155;
+    margin: 0;
+  }
+  .pain-card img.pain-illustration {
+    width: 100%; height: auto; border-radius: 8px;
+    border: 1px solid var(--rule); background: #fff;
+  }
+
+  /* Two column cards (sacrifices / gains) */
+  .two-col {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+  .pos-card {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: var(--radius); padding: 16px 18px;
+    box-shadow: var(--shadow);
+  }
+  .pos-card h3 {
+    margin: 0 0 12px; font-size: .95rem; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .pos-card.sacrifices h3 { color: var(--warn-ink); }
+  .pos-card.sacrifices h3::before {
+    content: '–'; display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; background: var(--warn-soft);
+    color: var(--warn); border-radius: 50%; font-weight: 800;
+  }
+  .pos-card.gains h3 { color: #166534; }
+  .pos-card.gains h3::before {
+    content: '+'; display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; background: #f0fdf4;
+    color: var(--good); border-radius: 50%; font-weight: 800;
+  }
+  .pos-card ul { margin: 0; padding-left: 1.1em; }
+  .pos-card li { margin: .4em 0; color: #334155; font-size: .92rem; line-height: 1.55; }
+
+  /* Callout (why incumbents can't copy) */
+  .callout {
+    background: var(--warn-soft); border-left: 3px solid var(--warn);
+    border-radius: var(--radius); padding: 16px 20px; margin-top: 16px;
+  }
+  .callout-label {
+    font-size: .65rem; font-weight: 700; letter-spacing: .14em;
+    color: var(--warn-ink); text-transform: uppercase; margin-bottom: 6px;
+  }
+  .callout p { margin: .4em 0 0; color: #422006; font-size: .95rem; line-height: 1.65; }
+
+  /* Competitor matrix */
+  .dim-defs {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: var(--radius); padding: 14px 18px; margin-bottom: 12px;
+    box-shadow: var(--shadow); list-style: none;
+  }
+  .dim-defs li { margin: .35em 0; font-size: .9rem; color: #475569; }
+  .dim-defs li strong { color: var(--text); font-weight: 700; }
+  .matrix-wrap {
+    border: 1px solid var(--rule); border-radius: var(--radius);
+    overflow: hidden; box-shadow: var(--shadow); background: var(--surface);
+  }
+  table.matrix {
+    width: 100%; border-collapse: separate; border-spacing: 0;
+    font-size: .88rem;
+  }
+  table.matrix th, table.matrix td {
+    padding: 12px 14px; text-align: left; vertical-align: top;
+    border-bottom: 1px solid var(--rule);
+  }
+  table.matrix tr:last-child td { border-bottom: none; }
+  table.matrix th {
+    background: #f1f5f9; color: var(--muted);
+    font-size: .68rem; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  table.matrix td.row-head {
+    background: #fafbfc; font-weight: 700; color: var(--text);
+    white-space: nowrap; font-size: .95rem;
+  }
+  table.matrix td .verdict {
+    display: block; font-weight: 700; color: var(--text);
+    font-size: .92rem; margin-bottom: 3px;
+  }
+  table.matrix td .detail {
+    display: block; color: var(--muted); font-size: .82rem; line-height: 1.5;
+  }
+  table.matrix tr.you td { background: var(--accent-soft); }
+  table.matrix tr.you td.row-head { color: var(--accent); }
+  table.matrix tr.you td .verdict { color: var(--accent); }
+
+  /* Horizontal scrollable card rails for surprises and absences. */
+  .scroll-hint {
+    font-size: .68rem; color: var(--muted); margin-left: auto;
+    text-transform: none; letter-spacing: 0; font-weight: 500;
+  }
+  .card-rail {
+    display: flex; gap: 12px; overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding: 2px 2px 14px; margin: 0;
+    list-style: none;
+  }
+  .card-rail::-webkit-scrollbar { height: 7px; }
+  .card-rail::-webkit-scrollbar-track { background: transparent; }
+  .card-rail::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  .card-rail::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  .card-rail > li {
+    scroll-snap-align: start;
+    min-width: 300px; max-width: 300px; flex-shrink: 0;
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: var(--radius); padding: 14px 16px;
+    box-shadow: var(--shadow);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .card-rail.surprises > li { border-left: 3px solid var(--accent); }
+  .card-rail.absences > li { border-left: 3px solid var(--warn); }
+  .card-rail .head {
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .card-rail .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%;
+    font-weight: 700; font-size: .72rem; flex-shrink: 0; margin-top: 1px;
+    color: #fff;
+  }
+  .card-rail.surprises .num { background: var(--accent); }
+  .card-rail.absences .num { background: var(--warn); }
+  .card-rail .headline {
+    font-weight: 700; font-size: .98rem; line-height: 1.35;
+  }
+  .card-rail .where {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .7rem; color: var(--muted); line-height: 1.5;
+    word-break: break-word;
+  }
+  .card-rail .body {
+    color: #475569; font-size: .88rem; line-height: 1.55;
+    margin-top: auto;
+  }
+
+  /* Inline code in body text */
+  code {
+    font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+    font-size: .85em; background: #f1f5f9; color: var(--text);
+    padding: 1px 6px; border-radius: 4px;
+  }
+  .surprise-list code, .absence-list code { font-size: .82em; }
+
+  footer {
+    color: var(--muted); font-size: .78rem; text-align: center;
+    margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--rule);
+  }
+</style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <span class="eyebrow">Product Story</span>
+      <h1><span class="name">nanochat</span></h1>
+      <p class="sub">It's ChatGPT, but a simple, minimal Python codebase designed for developers to train custom large language models cheaply and reproducibly by adjusting a single depth parameter.</p>
+    </div>
+  </header>
+
+  <main>
+    <section class="sec">
+      <div class="sec-label">The Pain</div>
+      <div class="pain-card has-image">
+        <div class="pain-label">↳ Why this exists</div>
+        <div class="pain-body">
+          <p>You're a university student, excited to experiment with training your own GPT-2-level language model, but you discover it originally cost $43,000 and requires a vast, intimidating codebase hundreds of files deep. Your real competitor isn't another cloud provider, it's the overwhelming task of manually sifting through complex open-source repositories to even begin.</p>
+          <img class="pain-illustration" src="pain.png" alt="before and after illustration">
+        </div>
+      </div>
+    </section>
+
+    <section class="sec">
+      <div class="sec-label">Where it sits</div>
+      <p class="sec-intro">The trade it makes versus the dominant alternative.</p>
+      <div class="two-col">
+        <div class="pos-card sacrifices">
+          <h3>What it gives up</h3>
+          <ul>
+            <li>It does not aim for the ultimate raw performance of state-of-the-art, multi-billion-parameter LLMs.</li>
+            <li>It trades exhaustive configurability and enterprise-grade features for opinionated simplicity and a focused 'depth' dial.</li>
+            <li>It is an 'experimental harness', implying it may not offer the production-readiness or robustness of commercial solutions.</li>
+            <li>It is primarily optimized for a specific high-performance GPU node (8xH100), with other hardware potentially offering reduced efficiency.</li>
+            <li>It sacrifices the broad applicability and flexibility of a generic LLM framework for a streamlined, minimalist codebase.</li>
+          </ul>
+        </div>
+        <div class="pos-card gains">
+          <h3>What it gets in return</h3>
+          <ul>
+            <li>It offers extremely low-cost training for GPT-2 level models, making LLM experimentation accessible for under $100.</li>
+            <li>It provides full end-to-end control and understanding of the entire LLM stack within a single, cohesive codebase.</li>
+            <li>Its minimal and hackable Python code enables rapid iteration and experimentation for individual researchers and hobbyists.</li>
+            <li>It significantly reduces the cognitive load for users, allowing them to focus on core LLM concepts without framework complexity.</li>
+            <li>It fosters a community-driven approach to optimizing 'micro models' via a public speedrun leaderboard for GPT-2 capability.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout">
+        <div class="callout-label">Why incumbents can't copy this</div>
+<p>Dominant incumbent commercial LLM providers like OpenAI cannot copy nanochat without destroying their business model. Their revenue relies on providing powerful, proprietary models as black-box APIs, monetizing usage rather than enabling low-cost self-training. Offering a hackable, sub-$100 training stack would cannibalize their API revenue and expose their valuable intellectual property. Similarly, large-scale open-source frameworks like DeepSpeed/Megatron-LM or even Hugging Face Transformers are designed for immense flexibility, generality, and extreme performance for complex research or enterprise needs. Copying nanochat's core principle of 'minimal, hackable' simplicity would require them to strip away layers of abstraction and configurability essential to their existing user base, alienating their target audience who prioritize power and breadth over extreme cognitive simplicity and ultra-low cost.</p>
+
+      </div>
+    </section>
+
+    <section class="sec">
+      <div class="sec-label">Side by Side</div>
+      <p class="sec-intro">Four dimensions that actually split the field.</p>
+      <ul class="dim-defs">
+        <li><strong>Code you can see</strong>: Can you look at and change all the computer code that makes the AI work?</li>
+        <li><strong>Train a GPT for $100</strong>: Can you create an AI with GPT-2's smarts for less than $100 on rented cloud computers?</li>
+        <li><strong>All-in-one toolkit</strong>: Does it give you everything you need (making sense of text, training, fine-tuning, talking to it) all in one simple package?</li>
+        <li><strong>Easy to hack on</strong>: Is the core code simple and clean enough that a single person can easily understand and change it to experiment?</li>
+      </ul>
+      <div class="matrix-wrap">
+        <table class="matrix">
+          <thead><tr><th>Product</th><th>Code you can see</th><th>Train a GPT for $100</th><th>All-in-one toolkit</th><th>Easy to hack on</th></tr></thead>
+          <tbody>
+            <tr class="you"><td class="row-head">nanochat (This Product)</td><td><span class="verdict">Open</span><span class="detail">Every file is plain Python you can fork, released under an MIT License.</span></td><td><span class="verdict">Yes</span><span class="detail">The README documents training a GPT-2 capability model for only $48 on an 8xH100 node.</span></td><td><span class="verdict">Full</span><span class="detail">It covers all major LLM stages including tokenization, pretraining, finetuning, evaluation, inference, and a chat UI.</span></td><td><span class="verdict">Yes</span><span class="detail">The code is described as 'minimal/hackable' and 'not an exhaustively configurable LLM framework'.</span></td></tr>
+            <tr><td class="row-head">OpenAI (e.g. ChatGPT/GPT-4)</td><td><span class="verdict">Closed</span><span class="detail">Access is API-only, with the underlying source code and model architecture kept private.</span></td><td><span class="verdict">No</span><span class="detail">These models are offered via API, with costs scaling per token, not for custom training from scratch.</span></td><td><span class="verdict">Partial</span><span class="detail">It provides powerful models and APIs, but not the tools for full end-to-end training of custom models.</span></td><td><span class="verdict">No</span><span class="detail">Interaction is through a fixed API; the internal architecture and logic cannot be modified by users.</span></td></tr>
+            <tr><td class="row-head">Hugging Face Transformers</td><td><span class="verdict">Open</span><span class="detail">The library and a vast ecosystem of models are fully open-source on GitHub.</span></td><td><span class="verdict">Partial</span><span class="detail">It's possible to train models, but building a complete pipeline for under $100 demands significant expertise and integration effort.</span></td><td><span class="verdict">Modular</span><span class="detail">It provides flexible building blocks (models, datasets, tokenizers, trainers) that require assembly and configuration.</span></td><td><span class="verdict">Moderate</span><span class="detail">Highly flexible and extensible for diverse applications, but the framework itself has a steep learning curve due to its generality.</span></td></tr>
+            <tr><td class="row-head">DeepSpeed/Megatron-LM</td><td><span class="verdict">Open</span><span class="detail">These frameworks are open-source, primarily used by large organizations or researchers.</span></td><td><span class="verdict">No</span><span class="detail">They are designed for training extremely large models on hundreds or thousands of GPUs, making costs prohibitive for small budgets.</span></td><td><span class="verdict">Focus: Train</span><span class="detail">Highly specialized for large-scale distributed training, typically requiring other tools for data preparation, evaluation, and deployment.</span></td><td><span class="verdict">No</span><span class="detail">Extremely complex and optimized for performance on massive clusters, not for individual developer hackability or rapid iteration.</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="sec">
+      <div class="sec-label">What the Code Reveals<span class="scroll-hint">scroll →</span></div>
+      <p class="sec-intro">Features hiding in the codebase that the README doesn't advertise. Each one is a bet about where the product is going.</p>
+      <ul class="card-rail surprises">
+        <li><div class="head"><span class="num">1</span><div class="headline">LLM Python Tool Use</div></div><div class="where">nanochat/execution.py, nanochat/engine.py, tasks/gsm8k.py, tasks/humaneval.py, tasks/spellingbee.py</div><div class="body">The product is betting heavily on agentic LLMs that can use external tools to verify their own reasoning and solve complex problems, moving beyond just text generation. This is a core part of building robust AI abilities.</div></li>
+        <li><div class="head"><span class="num">2</span><div class="headline">AI-Powered Research &amp; Development</div></div><div class="where">.claude/skills/read-arxiv-paper/SKILL.md, dev/LEADERBOARD.md</div><div class="body">The project is investing in LLM-driven self-improvement and research acceleration, turning the development process itself into an LLM-assisted workflow to find novel optimizations and architectural tweaks faster.</div></li>
+        <li><div class="head"><span class="num">3</span><div class="headline">Synthetic Self-Identity Data</div></div><div class="where">dev/gen_synthetic_data.py, tasks/customjson.py</div><div class="body">Nanochat aims to explicitly imbue its models with a well-defined identity and knowledge of their own architecture/purpose, a form of self-awareness crucial for building helpful and aligned AI.</div></li>
+        <li><div class="head"><span class="num">4</span><div class="headline">Muon-AdamW Hybrid Optimizer</div></div><div class="where">nanochat/optim.py, dev/LOG.md</div><div class="body">Achieving state-of-the-art efficiency and performance at the target scale requires highly specialized, custom-tuned optimizers that go beyond standard Adam/AdamW, combining strengths of different optimization theories.</div></li>
+        <li><div class="head"><span class="num">5</span><div class="headline">Custom FP8 Training Precision</div></div><div class="where">nanochat/common.py, nanochat/gpt.py, nanochat/fp8.py, dev/LEADERBOARD.md, dev/LOG.md</div><div class="body">To maximize training efficiency on cutting-edge hardware (like H100/H200), the project requires extremely fine-grained, explicit control over numerical precision, including a custom, minimal FP8 implementation.</div></li>
+        <li><div class="head"><span class="num">6</span><div class="headline">Advanced Per-Layer Model Control</div></div><div class="where">nanochat/gpt.py (resid_lambdas, x0_lambdas, smear_gate, backout_lambda, value_embeds), dev/LOG.md</div><div class="body">The project is actively exploring and integrating advanced architectural tweaks and learnable per-layer scalars (inspired by ResFormer and modded-nanoGPT) to unlock significant performance gains, especially for smaller, compute-optimal models.</div></li>
+        <li><div class="head"><span class="num">7</span><div class="headline">Scaling Law-Driven Hyperparameters</div></div><div class="where">scripts/base_train.py, dev/LOG.md (Auto Batch Size Scaling)</div><div class="body">Nanochat is designed for a 'miniseries' of compute-optimal models. Automatic, principled scaling of hyperparameters based on current research into scaling laws ensures efficiency and performance across a range of model sizes without manual re-tuning.</div></li>
+      </ul>
+    </section>
+
+    <section class="sec">
+      <div class="sec-label">Missing on Purpose<span class="scroll-hint">scroll →</span></div>
+      <p class="sec-intro">Features every competitor ships that this codebase deliberately doesn't. Strategy is choosing what not to do.</p>
+      <ul class="card-rail absences">
+        <li><div class="head"><span class="num">1</span><div class="headline">No Multi-Modal Inputs/Outputs</div></div><div class="where">No image/video processing libraries, no visual/audio input types in nanochat/engine.py or tokenizer.py. Tool use is explicitly Python code.</div><div class="body">Stays laser-focused on text-based LLM training and agentic reasoning. Adding multi-modal capabilities would drastically increase complexity (data, models, compute, evaluation) and diverge from the 'minimal/hackable' philosophy. Risk: falls behind competitors offering visual or audio understanding.</div></li>
+        <li><div class="head"><span class="num">2</span><div class="headline">No Real-time Web Access</div></div><div class="where">nanochat/execution.py warns about network access but doesn't implement it as a feature for the LLM. No built-in web scraping or external API integration for the LLM itself.</div><div class="body">Prioritizes in-context knowledge and learned reasoning over real-time factual retrieval. This simplifies inference, reduces latency, and avoids the complexities and costs of RAG or dynamic API integrations. Risk: LLM's knowledge becomes stale, cannot answer current events or dynamic queries.</div></li>
+        <li><div class="head"><span class="num">3</span><div class="headline">No User-Facing Analytics Dashboard</div></div><div class="where">wandb is used for developer experiment tracking (scripts/base_train.py), not for user-facing metrics. scripts/chat_web.py offers only basic worker pool stats.</div><div class="body">Focuses on being an 'experimental harness' and 'hackable codebase' for LLM training, not a production-ready SaaS chat platform. Avoiding user-centric analytics reduces complexity, database requirements, and privacy burdens. Risk: not suitable for direct deployment as a commercial service without significant additional development.</div></li>
+        <li><div class="head"><span class="num">4</span><div class="headline">No User Plugin System</div></div><div class="where">While internal Python tool use exists (nanochat/engine.py), there's no public API or framework (like OpenAI's plugins or LangChain agents) for end-users to extend nanochat's capabilities with external services or custom code.</div><div class="body">Keeps the system self-contained and controlled, reducing the attack surface and complexity of managing third-party code. This aligns with the 'minimal, cohesive, hackable' philosophy. Risk: Limits extensibility and ecosystem growth compared to platforms with rich plugin ecosystems.</div></li>
+        <li><div class="head"><span class="num">5</span><div class="headline">No Multi-Tenancy or User Auth</div></div><div class="where">scripts/chat_web.py is a single-user UI without user accounts, authentication, authorization, or isolation of user data/models. All requests are handled by a shared pool of workers.</div><div class="body">Simplifies the architecture significantly, focusing entirely on core LLM training and inference. Building a secure multi-tenant system adds enormous complexity (database schema, API keys, access control, resource allocation). Risk: Not production-ready for multi-user deployments; lacks security and data separation.</div></li>
+        <li><div class="head"><span class="num">6</span><div class="headline">No Enterprise Data Governance</div></div><div class="where">Data handling (nanochat/dataset.py, tasks/) focuses on datasets for training/evaluation. No features for GDPR-like data deletion, auditing, anonymization services, or role-based access control within the data lifecycle.</div><div class="body">Streamlines data processing for research and development. Implementing robust data governance and access control mechanisms is a significant undertaking, often requiring legal and compliance overhead, which is outside the scope of an 'experimental harness'. Risk: Not suitable for sensitive or regulated data environments without substantial additional effort.</div></li>
+      </ul>
+    </section>
+
+    <footer>Reverse engineered from the codebase.</footer>
+  </main>
+</body>
+</html>
